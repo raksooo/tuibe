@@ -6,4 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+atom_syndication = "0.11"
+chrono = "0.4"
 err-derive = "0.3"
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.20", features = ["full"] }
+toml = "0.5"
