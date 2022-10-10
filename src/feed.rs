@@ -37,17 +37,6 @@ impl Video {
         })
     }
 
-    pub fn get_label(&self) -> String {
-        let title_width = 40;
-        let author_width = 20;
-
-        let title = self.title.get(..title_width).unwrap_or(&self.title);
-        let author = self.author.get(..author_width).unwrap_or(&self.author);
-        let date = self.date.format("%Y-%m-%d %H:%M");
-
-        format!("{title:title_width$} {author:>author_width$} - {date}")
-    }
-
     pub fn toggle_selected(&mut self) {
         self.selected = !self.selected;
     }
@@ -56,6 +45,22 @@ impl Video {
         if self.date.timestamp() > timestamp {
             self.selected = true;
         }
+    }
+
+    pub fn get_label(&self, width: usize) -> String {
+        // Subtract width of datetime and horizontal padding and checkmark.
+        let width = width - 16 - 2 - 2;
+        // Split the area between title and author 3/4 for author.
+        let title_width = 3 * width / 4;
+        let author_width = width - title_width;
+
+        let date = self.date.format("%Y-%m-%d %H:%M");
+        let title = self.title.get(..title_width).unwrap_or(&self.title);
+        let author = self.author.get(..author_width).unwrap_or(&self.author);
+
+        let checkmark = if self.selected { "✓" } else { " " };
+
+        format!(" {checkmark} {title:title_width$} {author:>author_width$} - {date} ")
     }
 }
 

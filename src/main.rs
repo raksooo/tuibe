@@ -1,32 +1,46 @@
 mod error;
 mod config;
 mod feed;
+mod interface;
 
 use config::ConfigHandler;
-use feed::Feed;
+
+use std::{thread, time::Duration};
+use tui::backend::CrosstermBackend;
+use tui::Terminal;
+use crossterm::terminal::{
+    disable_raw_mode,
+    enable_raw_mode,
+    EnterAlternateScreen,
+    LeaveAlternateScreen,
+}
 
 #[tokio::main]
 async fn main() {
-    match ConfigHandler::new().await {
-        Ok(mut config_handler) => {
-            println!("config: {:?}", config_handler.config);
-            // config_handler
-            //     .add_subscription(
-            //         "https://www.youtube.com/feeds/videos.xml?channel_id=UC4Je3NiGWBA29x0jVeNmA2Q"
-            //             .to_string(),
-            //     )
-            //     .await
-            //     .expect("Failed to add subscription");
+    let config_handler = ConfigHandler::load().await.expect("Failed to load config");
 
-            match Feed::from_config(config_handler.config).await {
-                Ok(feed) => {
-                    for video in feed.videos {
-                        println!("{}", video.get_label());
-                    }
-                },
-                Err(error) => println!("Error fetching feed: {:?}", error),
-            }
-        },
-        Err(error) => println!("error initializing config: {:?}", error),
-    }
+    enable_raw_mode().expect("Failed to setup interface");
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture).expect("Failed to setup interface");
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
+
+    let feed = interface::feed::Feed::new(config_handler).await;
+
+    terminal
+        .draw(|f| {
+            let size = f.size();
+            let feed_list = feed.render(size);
+            f.render_widget(feed_list, size);
+        })
+        .expect("Failed to draw interface");
+
+    thread::sleep(Duration::from_millis(5000));
+
+    disable_raw_mode().expect("Failed to clean up");
+    execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");
+    terminal.show_cursor().expect("Failed to clean up");
+
+    Ok(())
 }

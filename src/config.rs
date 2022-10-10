@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::io;
 use crate::error::ConfigError;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub player: String,
     pub last_played_timestamp: i64,
@@ -28,7 +28,7 @@ pub struct ConfigHandler {
 }
 
 impl ConfigHandler {
-    pub async fn new() -> Result<ConfigHandler, ConfigError> {
+    pub async fn load() -> Result<ConfigHandler, ConfigError> {
         let mut path = Self::ensure_config_dir_exists().await?;
         path.push("config.toml");
 
