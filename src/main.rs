@@ -5,15 +5,14 @@ mod interface;
 
 use config::ConfigHandler;
 
-use std::{thread, time::Duration};
+use std::time::Duration;
 use tui::backend::CrosstermBackend;
 use tui::Terminal;
-use crossterm::terminal::{
-    disable_raw_mode,
-    enable_raw_mode,
-    EnterAlternateScreen,
-    LeaveAlternateScreen,
-}
+use crossterm::{
+    event::{poll, read, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +20,7 @@ async fn main() {
 
     enable_raw_mode().expect("Failed to setup interface");
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture).expect("Failed to setup interface");
+    execute!(stdout, EnterAlternateScreen).expect("Failed to setup interface");
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
@@ -36,11 +35,20 @@ async fn main() {
         })
         .expect("Failed to draw interface");
 
-    thread::sleep(Duration::from_millis(5000));
+    loop {
+        if poll(Duration::from_millis(5000)).expect("Failed to poll for input") {
+            if let Event::Key(event) = read().expect("Failed to read input") {
+                match event.code {
+                    KeyCode::Char('q') => break,
+                    _ => (),
+                }
+            }
+        } else {
+            break;
+        }
+    }
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");
     terminal.show_cursor().expect("Failed to clean up");
-
-    Ok(())
 }
