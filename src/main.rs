@@ -25,26 +25,30 @@ async fn main() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    let feed = interface::feed::Feed::new(config_handler).await;
+    let mut feed = interface::feed::Feed::new(config_handler).await;
 
-    terminal
-        .draw(|f| {
-            let size = f.size();
-            let feed_list = feed.render(size);
-            f.render_widget(feed_list, size);
-        })
-        .expect("Failed to draw interface");
 
     loop {
-        if poll(Duration::from_millis(5000)).expect("Failed to poll for input") {
+        terminal
+            .draw(|f| {
+                let size = f.size();
+                let feed_list = feed.render(size);
+                f.render_widget(feed_list, size);
+            })
+            .expect("Failed to draw interface");
+
+        if poll(Duration::from_millis(10000)).expect("Failed to poll for input") {
             if let Event::Key(event) = read().expect("Failed to read input") {
                 match event.code {
                     KeyCode::Char('q') => break,
+                    KeyCode::Char(' ') => feed.toggle_current_item(),
+                    KeyCode::Up => feed.move_up(),
+                    KeyCode::Char('k') => feed.move_up(),
+                    KeyCode::Down => feed.move_down(),
+                    KeyCode::Char('j') => feed.move_down(),
                     _ => (),
                 }
             }
-        } else {
-            break;
         }
     }
 
