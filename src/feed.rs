@@ -69,7 +69,7 @@ pub struct Feed {
 }
 
 impl Feed {
-    pub async fn from_config(config: Config) -> Result<Feed, FeedError> {
+    pub async fn from_config(config: &Config) -> Result<Feed, FeedError> {
         let mut videos: Vec<Video> = Vec::new();
         for channel_url in config.subscriptions.iter() {
             let channel_videos = Self::fetch_videos(channel_url).await?;
