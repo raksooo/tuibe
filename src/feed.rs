@@ -87,7 +87,7 @@ impl Feed {
             }
         }
 
-        videos.sort_by(|a, b| a.date.partial_cmp(&b.date).unwrap());
+        videos.sort_by(|a, b| b.date.partial_cmp(&a.date).unwrap());
 
         Ok(Feed { videos })
     }
