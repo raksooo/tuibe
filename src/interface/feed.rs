@@ -1,11 +1,11 @@
-use crate::feed::{Feed as VideoFeed};
 use crate::config::Config;
+use crate::feed::Feed as VideoFeed;
 use tui::{
     backend::Backend,
-    Frame,
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    Frame,
 };
 
 pub struct Feed {
@@ -74,7 +74,14 @@ impl Feed {
     }
 
     fn create_description(&self) -> Paragraph {
-        let description = self.feed.videos.get(self.current_item).unwrap().description.to_owned();
+        let description = self
+            .feed
+            .videos
+            .get(self.current_item)
+            .unwrap()
+            .description
+            .to_owned();
+
         Paragraph::new(description)
             .block(Block::default().title("Description").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
@@ -82,6 +89,8 @@ impl Feed {
     }
 
     async fn load_feed_from_config(config: &Config) -> VideoFeed {
-        VideoFeed::from_config(config).await.expect("Failed to fetch videos")
+        VideoFeed::from_config(config)
+            .await
+            .expect("Failed to fetch videos")
     }
 }

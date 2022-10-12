@@ -1,9 +1,9 @@
-use tokio::{fs, fs::File, io::AsyncWriteExt};
-use chrono::Utc;
-use serde::{Serialize, Deserialize};
-use std::path::PathBuf;
-use std::io;
 use crate::error::ConfigError;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::io;
+use std::path::PathBuf;
+use tokio::{fs, fs::File, io::AsyncWriteExt};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -34,10 +34,7 @@ impl ConfigHandler {
 
         let config = Self::read_config(&path).await?;
 
-        Ok(ConfigHandler {
-            path,
-            config,
-        })
+        Ok(ConfigHandler { path, config })
     }
 
     pub async fn set_player(&mut self, player: &str) -> Result<(), ConfigError> {
@@ -59,7 +56,10 @@ impl ConfigHandler {
     }
 
     pub async fn remove_subscription(&mut self, subscription: String) -> Result<(), ConfigError> {
-        let index = self.config.subscriptions.iter()
+        let index = self
+            .config
+            .subscriptions
+            .iter()
             .position(|item| *item == subscription)
             .ok_or(ConfigError::SubscriptionDoesNotExist)?;
         self.config.subscriptions.remove(index);
@@ -76,7 +76,7 @@ impl ConfigHandler {
                         .await
                         .map_err(|_| ConfigError::WriteConfigFile)?;
                     Ok(config)
-                },
+                }
                 _ => Err(ConfigError::ReadConfigFile),
             },
         }
@@ -88,15 +88,23 @@ impl ConfigHandler {
 
     async fn write_config_to_path(path: &PathBuf, config: &Config) -> Result<(), ConfigError> {
         let toml = toml::to_string(config).expect("Failed to serialize config");
-        let mut file = File::create(path).await.map_err(|_| ConfigError::CreateConfigFile)?;
-        file.write(toml.as_bytes()).await.map_err(|_| ConfigError::WriteConfigFile)?;
-        file.flush().await.map_err(|_| ConfigError::WriteConfigFile)?;
+        let mut file = File::create(path)
+            .await
+            .map_err(|_| ConfigError::CreateConfigFile)?;
+        file.write(toml.as_bytes())
+            .await
+            .map_err(|_| ConfigError::WriteConfigFile)?;
+        file.flush()
+            .await
+            .map_err(|_| ConfigError::WriteConfigFile)?;
         Ok(())
     }
 
     async fn ensure_config_dir_exists() -> Result<PathBuf, ConfigError> {
         let dir = Self::find_config_dir();
-        fs::create_dir_all(&dir).await.map_err(|_| ConfigError::CreateConfigDir)?;
+        fs::create_dir_all(&dir)
+            .await
+            .map_err(|_| ConfigError::CreateConfigDir)?;
 
         Ok(dir)
     }

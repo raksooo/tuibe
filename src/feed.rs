@@ -1,7 +1,7 @@
-use chrono::{DateTime, FixedOffset};
+use crate::config::Config;
 use crate::error::FeedError;
 use atom_syndication::Entry;
-use crate::config::Config;
+use chrono::{DateTime, FixedOffset};
 
 pub struct Video {
     pub title: String,
@@ -15,7 +15,8 @@ pub struct Video {
 
 impl Video {
     pub fn from_rss_entry(entry: &Entry, author: &str) -> Result<Video, FeedError> {
-        let description = entry.extensions()
+        let description = entry
+            .extensions()
             .get("media")
             .and_then(|media| media.get("group"))
             .and_then(|group| group.first())
@@ -26,9 +27,16 @@ impl Video {
             .map_err(|_| FeedError::ParseVideoDescription)?
             .to_string();
 
+        let url = entry
+            .links()
+            .first()
+            .ok_or(FeedError::ParseVideo)?
+            .href()
+            .to_string();
+
         Ok(Video {
             title: entry.title().as_str().to_string(),
-            url: entry.links().first().ok_or(FeedError::ParseVideo)?.href().to_string(),
+            url,
             author: author.to_string(),
             description,
             length: 0,
@@ -81,16 +89,17 @@ impl Feed {
 
         videos.sort_by(|a, b| a.date.partial_cmp(&b.date).unwrap());
 
-        Ok(Feed {
-            videos,
-        })
+        Ok(Feed { videos })
     }
 
     async fn fetch_videos(url: &String) -> Result<Vec<Video>, FeedError> {
         let feed = Self::fetch_rss(url).await?;
         let author = feed.title().as_str();
 
-        feed.entries().iter().map(|entry| Video::from_rss_entry(entry, author)).collect()
+        feed.entries()
+            .iter()
+            .map(|entry| Video::from_rss_entry(entry, author))
+            .collect()
     }
 
     async fn fetch_rss(url: &String) -> Result<atom_syndication::Feed, FeedError> {

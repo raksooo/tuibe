@@ -1,16 +1,18 @@
+use crate::App;
+use crossterm::event::{poll, read};
 use std::time::Duration;
 use tui::{
     backend::Backend,
-    Frame,
     layout::{Constraint, Direction, Layout},
-    Terminal,
+    Frame, Terminal,
 };
-use crossterm::event::{poll, read};
-use crate::App;
 
 pub async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) {
     loop {
-        terminal.draw(|f| draw(f, &app)).expect("Failed to draw interface");
+        terminal
+            .draw(|f| draw(f, &app))
+            .expect("Failed to draw interface");
+
         if !poll_event(app).await {
             break;
         }

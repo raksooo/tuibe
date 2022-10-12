@@ -1,5 +1,5 @@
-mod error;
 mod config;
+mod error;
 mod feed;
 mod interface;
 
@@ -7,11 +7,11 @@ use config::ConfigHandler;
 use interface::app::App;
 use interface::ui;
 
-use tui::{backend::CrosstermBackend, Terminal};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use tui::{backend::CrosstermBackend, Terminal};
 
 #[tokio::main]
 async fn main() {
