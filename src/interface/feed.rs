@@ -1,8 +1,12 @@
 use crate::feed::{Feed as VideoFeed};
 use crate::config::Config;
-use tui::layout::Rect;
-use tui::widgets::{Block, List, ListItem};
-use tui::style::{Color, Style};
+use tui::{
+    backend::Backend,
+    Frame,
+    layout::Rect,
+    style::{Color, Style},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+};
 
 pub struct Feed {
     feed: VideoFeed,
@@ -39,11 +43,25 @@ impl Feed {
         }
     }
 
-    pub fn render(&self, size: Rect) -> List {
+    pub fn draw<B: Backend>(
+        &self,
+        f: &mut Frame<B>,
+        list_constraints: Rect,
+        description_constrints: Rect,
+    ) {
+        let width = f.size().width.into();
+        let list = self.create_list(width);
+        let description = self.create_description();
+
+        f.render_widget(list, list_constraints);
+        f.render_widget(description, description_constrints);
+    }
+
+    fn create_list(&self, width: usize) -> List {
         let mut items: Vec<ListItem> = Vec::new();
 
         for (i, video) in self.feed.videos.iter().enumerate() {
-            let mut item = ListItem::new(video.get_label(size.width.into()));
+            let mut item = ListItem::new(video.get_label(width));
             if i == self.current_item {
                 item = item.style(Style::default().fg(Color::Green));
             }
@@ -53,6 +71,14 @@ impl Feed {
         List::new(items)
             .block(Block::default().title("Videos"))
             .style(Style::default().fg(Color::White))
+    }
+
+    fn create_description(&self) -> Paragraph {
+        let description = self.feed.videos.get(self.current_item).unwrap().description.to_owned();
+        Paragraph::new(description)
+            .block(Block::default().title("Description").borders(Borders::ALL))
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true })
     }
 
     async fn load_feed_from_config(config: &Config) -> VideoFeed {
