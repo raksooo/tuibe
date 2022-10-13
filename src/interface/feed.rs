@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::feed::Feed as VideoFeed;
+use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::component::{Component, Frame};
 use crossterm::event::{Event, KeyCode};
 use tui::{
@@ -9,7 +9,7 @@ use tui::{
 };
 
 pub struct Feed {
-    feed: VideoFeed,
+    feed: Vec<Video>,
     current_item: usize,
 }
 
@@ -26,7 +26,7 @@ impl Feed {
     }
 
     pub fn toggle_current_item(&mut self) {
-        if let Some(video) = self.feed.videos.get_mut(self.current_item) {
+        if let Some(video) = self.feed.get_mut(self.current_item) {
             video.toggle_selected();
         }
     }
@@ -38,7 +38,7 @@ impl Feed {
     }
 
     pub fn move_down(&mut self) {
-        if self.current_item < self.feed.videos.len() - 1 {
+        if self.current_item < self.feed.len() - 1 {
             self.current_item += 1;
         }
     }
@@ -46,7 +46,7 @@ impl Feed {
     fn create_list(&self, width: usize) -> List {
         let mut items: Vec<ListItem> = Vec::new();
 
-        for (i, video) in self.feed.videos.iter().enumerate() {
+        for (i, video) in self.feed.iter().enumerate() {
             let mut item = ListItem::new(video.get_label(width));
             if i == self.current_item {
                 item = item.style(Style::default().fg(Color::Green));
@@ -62,7 +62,6 @@ impl Feed {
     fn create_description(&self) -> Paragraph {
         let description = self
             .feed
-            .videos
             .get(self.current_item)
             .unwrap()
             .description
@@ -74,10 +73,11 @@ impl Feed {
             .wrap(Wrap { trim: true })
     }
 
-    async fn load_feed_from_config(config: &Config) -> VideoFeed {
+    async fn load_feed_from_config(config: &Config) -> Vec<Video> {
         VideoFeed::from_config(config)
             .await
             .expect("Failed to fetch videos")
+            .videos
     }
 }
 
