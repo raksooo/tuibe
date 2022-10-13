@@ -6,13 +6,14 @@ use tui::layout::Rect;
 
 pub struct App {
     config_handler: ConfigHandler,
+
     pub feed: Box<dyn Component>,
 }
 
 impl App {
-    pub async fn new(config_handler: ConfigHandler) -> App {
+    pub async fn new(config_handler: ConfigHandler) -> Self {
         let feed = Feed::new(&config_handler.config).await;
-        App {
+        Self {
             config_handler,
             feed: Box::new(feed),
         }
@@ -20,7 +21,7 @@ impl App {
 }
 
 impl Component for App {
-    fn draw(&self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, size: Rect) {
         self.feed.draw(f, size);
     }
 
