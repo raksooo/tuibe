@@ -1,11 +1,11 @@
 use crate::config::Config;
 use crate::feed::Feed as VideoFeed;
+use crate::interface::component::{Component, Frame};
+use crossterm::event::{Event, KeyCode};
 use tui::{
-    backend::Backend,
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 pub struct Feed {
@@ -43,20 +43,6 @@ impl Feed {
         }
     }
 
-    pub fn draw<B: Backend>(
-        &self,
-        f: &mut Frame<B>,
-        list_constraints: Rect,
-        description_constrints: Rect,
-    ) {
-        let width = f.size().width.into();
-        let list = self.create_list(width);
-        let description = self.create_description();
-
-        f.render_widget(list, list_constraints);
-        f.render_widget(description, description_constrints);
-    }
-
     fn create_list(&self, width: usize) -> List {
         let mut items: Vec<ListItem> = Vec::new();
 
@@ -92,5 +78,35 @@ impl Feed {
         VideoFeed::from_config(config)
             .await
             .expect("Failed to fetch videos")
+    }
+}
+
+impl Component for Feed {
+    fn draw(&self, f: &mut Frame, size: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
+            .split(size);
+
+        let width = f.size().width.into();
+        let list = self.create_list(width);
+        let description = self.create_description();
+
+        f.render_widget(list, chunks[0]);
+        f.render_widget(description, chunks[1]);
+    }
+
+    fn handle_event(&mut self, event: Event) {
+        if let Event::Key(event) = event {
+            match event.code {
+                KeyCode::Char(' ') => self.toggle_current_item(),
+                KeyCode::Up => self.move_up(),
+                KeyCode::Down => self.move_down(),
+                KeyCode::Char('j') => self.move_down(),
+                KeyCode::Char('k') => self.move_up(),
+                _ => (),
+                // KeyCode::Char('r') => self.reload_feed(&self.config_handler.config).await,
+            }
+        }
     }
 }
