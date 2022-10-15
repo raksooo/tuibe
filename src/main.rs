@@ -25,7 +25,7 @@ async fn main() {
     let config_handler = ConfigHandler::load().await.expect("Failed to load config");
     let mut app = interface::app::App::new(config_handler);
 
-    ui::run(&mut terminal, &mut app);
+    ui::run(&mut terminal, &mut app).await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");
