@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::{
-    component::{handled_event, Component, EventFuture, Frame, UpdateEvent, UpdateSender},
+    component::{handled_event_none, Component, EventFuture, EventSender, Frame, UpdateEvent},
     loading_indicator::LoadingIndicator,
 };
 use crossterm::event::{Event, KeyCode};
@@ -18,26 +18,26 @@ pub struct Feed {
     videos: Arc<Mutex<Option<Vec<Video>>>>,
     current_item: Arc<Mutex<usize>>,
 
+    tx: EventSender,
     pub loading_indicator: LoadingIndicator,
 }
 
 impl Feed {
-    pub fn new(tx: UpdateSender, config: Option<Config>) -> Self {
-        let new_feed = Self::create_empty(tx.clone(), config.clone());
+    pub fn new(tx: EventSender, config: Option<Config>) -> Self {
+        let mut new_feed = Self::create_empty(tx.clone(), config.clone());
 
-        if let Some(config) = config {
-            let videos = Arc::clone(&new_feed.videos);
-            let current_item = Arc::clone(&new_feed.current_item);
+        if config.is_some() {
+            let reload_future = new_feed.reload();
             tokio::spawn(async move {
-                Self::initiate_load_feed(videos, current_item, &config).await;
-                tx.send(UpdateEvent::Redraw).await;
+                let event = reload_future.await;
+                tx.send(event).await;
             });
         }
 
         new_feed
     }
 
-    fn create_empty(tx: UpdateSender, config: Option<Config>) -> Self {
+    fn create_empty(tx: EventSender, config: Option<Config>) -> Self {
         let videos = Arc::new(Mutex::new(None));
         let current_item = Arc::new(Mutex::new(0));
 
@@ -48,22 +48,46 @@ impl Feed {
             videos,
             current_item,
 
+            tx,
             loading_indicator,
         }
     }
 
     pub async fn update_with_config(&mut self, config: &Config) {
         self.config = Some(config.to_owned());
-        self.reload().await
+        self.reload().await;
     }
 
     fn reload(&mut self) -> EventFuture {
+        let tx = self.tx.clone();
+        let videos = Arc::clone(&self.videos);
+        let current_item = Arc::clone(&self.current_item);
         if let Some(config) = &self.config {
-            let videos = Arc::clone(&self.videos);
-            let current_item = Arc::clone(&self.current_item);
-            Self::initiate_load_feed(videos, current_item, &config)
+            let config = config.clone();
+            Box::pin(async move {
+                {
+                    let mut videos = videos.lock().await;
+                    *videos = None;
+                    let mut current_item = current_item.lock().await;
+                    *current_item = 0;
+                }
+
+                tx.send(UpdateEvent::Redraw).await;
+
+                let new_videos = VideoFeed::from_config(&config)
+                    .await
+                    .expect("Failed to fetch videos")
+                    .videos;
+
+                if new_videos.len() > 0 {
+                    let mut videos = videos.lock().await;
+                    *videos = Some(new_videos);
+                }
+
+                UpdateEvent::Redraw
+            })
         } else {
-            handled_event()
+            handled_event_none()
         }
     }
 
@@ -75,8 +99,11 @@ impl Feed {
             if let Some(ref mut videos) = *videos.lock().await {
                 if let Some(video) = videos.get_mut(*current_item) {
                     video.toggle_selected();
+                    return UpdateEvent::Redraw;
                 }
             }
+
+            UpdateEvent::None
         })
     }
 
@@ -86,6 +113,9 @@ impl Feed {
             let mut current_item = current_item.lock().await;
             if *current_item > 0 {
                 *current_item = *current_item - 1;
+                UpdateEvent::Redraw
+            } else {
+                UpdateEvent::None
             }
         })
     }
@@ -97,32 +127,9 @@ impl Feed {
             if let Some(ref videos) = *videos.lock().await {
                 let mut current_item = current_item.lock().await;
                 *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
-            }
-        })
-    }
-
-    fn initiate_load_feed(
-        videos: Arc<Mutex<Option<Vec<Video>>>>,
-        current_item: Arc<Mutex<usize>>,
-        config: &Config,
-    ) -> EventFuture {
-        let config = config.to_owned();
-        Box::pin(async move {
-            {
-                let mut videos = videos.lock().await;
-                *videos = None;
-                let mut current_item = current_item.lock().await;
-                *current_item = 0;
-            }
-
-            let new_videos = VideoFeed::from_config(&config)
-                .await
-                .expect("Failed to fetch videos")
-                .videos;
-
-            if new_videos.len() > 0 {
-                let mut videos = videos.lock().await;
-                *videos = Some(new_videos);
+                UpdateEvent::Redraw
+            } else {
+                UpdateEvent::None
             }
         })
     }
@@ -164,10 +171,10 @@ impl Component for Feed {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char('r') => self.reload(),
-                _ => handled_event(),
+                _ => handled_event_none(),
             }
         } else {
-            handled_event()
+            handled_event_none()
         }
     }
 }

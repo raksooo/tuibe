@@ -1,6 +1,6 @@
 use crate::config::ConfigHandler;
-use crate::interface::component::{Component, EventFuture, Frame, UpdateEvent, UpdateSender};
-use crate::interface::feed::Feed;
+use crate::interface::component::{Component, EventFuture, EventSender, Frame, UpdateEvent, handled_event};
+use crate::interface::{feed::Feed, loading_indicator::LoadingIndicator};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,12 +9,12 @@ use tui::layout::Rect;
 pub struct App {
     config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
-    tx: UpdateSender,
+    pub loading_indicator: LoadingIndicator,
     pub feed: Arc<Mutex<Feed>>,
 }
 
 impl App {
-    pub fn new(tx: UpdateSender) -> Self {
+    pub fn new(tx: EventSender) -> Self {
         let new_app = Self::create_empty(tx.clone());
 
         let config_handler = Arc::clone(&new_app.config_handler);
@@ -44,13 +44,14 @@ impl App {
         new_app
     }
 
-    fn create_empty(tx: UpdateSender) -> Self {
+    fn create_empty(tx: EventSender) -> Self {
         let config_handler = Arc::new(Mutex::new(None));
         let feed = Arc::new(Mutex::new(Feed::new(tx.clone(), None)));
+        let loading_indicator = LoadingIndicator::new(tx);
 
         Self {
             config_handler,
-            tx,
+            loading_indicator,
             feed,
         }
     }
@@ -60,6 +61,8 @@ impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         if let Ok(mut feed) = self.feed.try_lock() {
             feed.draw(f, size);
+        } else {
+            self.loading_indicator.draw(f, size);
         }
     }
 
@@ -69,17 +72,12 @@ impl Component for App {
             ..
         }) = event
         {
-            let tx = self.tx.clone();
-            Box::pin(async move {
-                tx.send(UpdateEvent::Quit)
-                    .await
-                    .expect("Failed to send quit event");
-            })
+            handled_event(UpdateEvent::Quit)
         } else {
             let feed = Arc::clone(&self.feed);
             Box::pin(async move {
                 let mut feed = feed.lock().await;
-                feed.handle_event(event).await;
+                feed.handle_event(event).await
             })
         }
     }

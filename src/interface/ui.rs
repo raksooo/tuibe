@@ -1,5 +1,5 @@
 use crate::interface::app::App;
-use crate::interface::component::{Backend, Component, UpdateEvent, UpdateSender};
+use crate::interface::component::{Backend, Component, EventSender, UpdateEvent};
 use crossterm::event::{Event, EventStream};
 use tokio::{select, sync::mpsc};
 use tokio_stream::StreamExt;
@@ -11,14 +11,14 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
 
     let mut app: Box<dyn Component> = Box::new(App::new(tx.clone()));
 
-    run_draw_cycle(terminal, &mut app);
-
+    tx.send(UpdateEvent::Redraw).await;
     loop {
         select! {
             Some(event) = rx.recv() => {
                 match event {
                     UpdateEvent::Redraw => run_draw_cycle(terminal, &mut app),
                     UpdateEvent::Quit => break,
+                    UpdateEvent::None => (),
                 };
             },
             Some(Ok(event)) = event_reader.next() => {
@@ -28,16 +28,13 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
     }
 }
 
-fn handle_event(tx: UpdateSender, app: &mut Box<dyn Component>, event: Event) {
-    app.handle_event_sync(event.clone());
+fn handle_event(tx: EventSender, app: &mut Box<dyn Component>, event: Event) {
     let future = app.handle_event(event.clone());
-
-    let tx = tx.clone();
     tokio::spawn(async move {
-        future.await;
-        tx.send(UpdateEvent::Redraw)
-            .await
-            .expect("Failed to send draw event");
+        let event = future.await;
+        if event != UpdateEvent::None {
+            tx.send(event).await.expect("Failed to send draw event");
+        }
     });
 }
 

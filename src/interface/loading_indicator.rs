@@ -1,4 +1,4 @@
-use crate::interface::component::{Component, Frame, UpdateEvent, UpdateSender};
+use crate::interface::component::{Component, EventSender, Frame, UpdateEvent};
 use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -10,11 +10,11 @@ use tui::{
 
 pub struct LoadingIndicator {
     dots: Arc<Mutex<usize>>,
-    tx: UpdateSender,
+    tx: EventSender,
 }
 
 impl LoadingIndicator {
-    pub fn new(tx: UpdateSender) -> Self {
+    pub fn new(tx: EventSender) -> Self {
         Self {
             dots: Arc::new(Mutex::new(0)),
             tx,
