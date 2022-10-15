@@ -23,7 +23,7 @@ pub trait Component<P> {
 
     fn draw(&mut self, f: &mut Frame, size: Rect);
 
-    fn handle_event(&mut self, event: Event) -> EventFuture {
+    fn handle_event(&mut self, _event: Event) -> EventFuture {
         handled_event()
     }
 

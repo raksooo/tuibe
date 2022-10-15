@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::{
-    component::{handled_event, Component, EventFuture, Frame, UpdateSender},
+    component::{handled_event, Component, EventFuture, Frame, UpdateEvent, UpdateSender},
     loading_indicator::LoadingIndicator,
 };
 use crossterm::event::{Event, KeyCode};
@@ -18,11 +18,25 @@ pub struct Feed {
     videos: Arc<Mutex<Option<Vec<Video>>>>,
     current_item: Arc<Mutex<usize>>,
 
-    tx: UpdateSender,
     pub loading_indicator: Box<dyn Component<()>>,
 }
 
 impl Feed {
+    fn empty(tx: UpdateSender, config: Config) -> Self {
+        let videos = Arc::new(Mutex::new(None));
+        let current_item = Arc::new(Mutex::new(0));
+
+        let loading_indicator = LoadingIndicator::new(tx.clone(), ());
+
+        Self {
+            config,
+            videos,
+            current_item,
+
+            loading_indicator: Box::new(loading_indicator),
+        }
+    }
+
     fn reload_feed(&mut self) -> EventFuture {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
@@ -92,25 +106,16 @@ impl Feed {
 
 impl Component<Config> for Feed {
     fn new(tx: UpdateSender, config: Config) -> Self {
-        let videos = Arc::new(Mutex::new(None));
-        let current_item = Arc::new(Mutex::new(0));
+        let new_feed = Self::empty(tx.clone(), config.clone());
 
-        tokio::spawn(Self::initiate_load_feed(
-            Arc::clone(&videos),
-            Arc::clone(&current_item),
-            &config,
-        ));
+        let videos = Arc::clone(&new_feed.videos);
+        let current_item = Arc::clone(&new_feed.current_item);
+        tokio::spawn(async move {
+            Self::initiate_load_feed(videos, current_item, &config).await;
+            tx.send(UpdateEvent::Redraw).await;
+        });
 
-        let loading_indicator = LoadingIndicator::new(tx.clone(), ());
-
-        Self {
-            config,
-            videos,
-            current_item,
-
-            tx,
-            loading_indicator: Box::new(loading_indicator),
-        }
+        new_feed
     }
 
     fn draw(&mut self, f: &mut Frame, size: Rect) {

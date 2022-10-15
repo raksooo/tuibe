@@ -24,13 +24,13 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
                 };
             },
             Some(Ok(event)) = event_reader.next() => {
-                handle_event(tx.clone(), terminal, &mut app, event);
+                handle_event(tx.clone(), &mut app, event);
             },
         };
     }
 }
 
-fn handle_event(tx: UpdateSender, terminal: &mut Terminal<Backend>, app: &mut App, event: Event) {
+fn handle_event(tx: UpdateSender, app: &mut App, event: Event) {
     app.handle_event_sync(event.clone());
     let future = app.handle_event(event.clone());
 
