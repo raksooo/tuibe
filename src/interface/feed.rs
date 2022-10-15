@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::{
-    component::{handled_event, Component, EventFuture, Frame},
+    component::{handled_event, Component, EventFuture, Frame, UpdateSender},
     loading_indicator::LoadingIndicator,
 };
 use crossterm::event::{Event, KeyCode};
@@ -18,29 +18,11 @@ pub struct Feed {
     videos: Arc<Mutex<Option<Vec<Video>>>>,
     current_item: Arc<Mutex<usize>>,
 
-    pub loading_indicator: Box<dyn Component>,
+    tx: UpdateSender,
+    pub loading_indicator: Box<dyn Component<()>>,
 }
 
 impl Feed {
-    pub fn new(config: &Config) -> Self {
-        let config = config.to_owned();
-        let videos = Arc::new(Mutex::new(None));
-        let current_item = Arc::new(Mutex::new(0));
-
-        tokio::spawn(Self::initiate_load_feed(
-            Arc::clone(&videos),
-            Arc::clone(&current_item),
-            &config,
-        ));
-
-        Self {
-            config,
-            videos,
-            current_item,
-            loading_indicator: Box::new(LoadingIndicator::new()),
-        }
-    }
-
     fn reload_feed(&mut self) -> EventFuture {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
@@ -108,7 +90,29 @@ impl Feed {
     }
 }
 
-impl Component for Feed {
+impl Component<Config> for Feed {
+    fn new(tx: UpdateSender, config: Config) -> Self {
+        let videos = Arc::new(Mutex::new(None));
+        let current_item = Arc::new(Mutex::new(0));
+
+        tokio::spawn(Self::initiate_load_feed(
+            Arc::clone(&videos),
+            Arc::clone(&current_item),
+            &config,
+        ));
+
+        let loading_indicator = LoadingIndicator::new(tx.clone(), ());
+
+        Self {
+            config,
+            videos,
+            current_item,
+
+            tx,
+            loading_indicator: Box::new(loading_indicator),
+        }
+    }
+
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         if let Ok(current_item) = self.current_item.try_lock() {
             if let Ok(videos) = self.videos.try_lock() {

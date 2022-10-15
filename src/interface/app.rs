@@ -1,5 +1,5 @@
-use crate::config::ConfigHandler;
-use crate::interface::component::{Component, EventFuture, Frame};
+use crate::config::{Config, ConfigHandler};
+use crate::interface::component::{Component, EventFuture, Frame, UpdateSender};
 use crate::interface::feed::Feed;
 use crossterm::event::Event;
 use tui::layout::Rect;
@@ -7,20 +7,21 @@ use tui::layout::Rect;
 pub struct App {
     config_handler: ConfigHandler,
 
-    pub feed: Box<dyn Component>,
+    tx: UpdateSender,
+    pub feed: Box<dyn Component<Config>>,
 }
 
-impl App {
-    pub fn new(config_handler: ConfigHandler) -> Self {
-        let feed = Feed::new(&config_handler.config);
+impl Component<ConfigHandler> for App {
+    fn new(tx: UpdateSender, config_handler: ConfigHandler) -> Self {
+        let feed = Feed::new(tx.clone(), config_handler.config.to_owned());
         Self {
             config_handler,
+
+            tx: tx,
             feed: Box::new(feed),
         }
     }
-}
 
-impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         self.feed.draw(f, size);
     }

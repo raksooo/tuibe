@@ -1,4 +1,4 @@
-use crate::interface::component::{Component, Frame};
+use crate::interface::component::{Component, Frame, UpdateSender};
 use tui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
@@ -9,13 +9,11 @@ pub struct LoadingIndicator {
     dots: usize,
 }
 
-impl LoadingIndicator {
-    pub fn new() -> Self {
+impl Component<()> for LoadingIndicator {
+    fn new(_tx: UpdateSender, _props: ()) -> Self {
         Self { dots: 0 }
     }
-}
 
-impl Component for LoadingIndicator {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         let dots = format!("{:.<n$}", "", n = self.dots);
         let dots_with_padding = format!("{:<3}", dots);
