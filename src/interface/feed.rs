@@ -14,28 +14,30 @@ use tui::{
 };
 
 pub struct Feed {
-    config: Config,
+    config: Option<Config>,
     videos: Arc<Mutex<Option<Vec<Video>>>>,
     current_item: Arc<Mutex<usize>>,
 
-    pub loading_indicator: Box<dyn Component>,
+    pub loading_indicator: LoadingIndicator,
 }
 
 impl Feed {
-    pub fn new(tx: UpdateSender, config: Config) -> Self {
-        let new_feed = Self::empty(tx.clone(), config.clone());
+    pub fn new(tx: UpdateSender, config: Option<Config>) -> Self {
+        let new_feed = Self::create_empty(tx.clone(), config.clone());
 
-        let videos = Arc::clone(&new_feed.videos);
-        let current_item = Arc::clone(&new_feed.current_item);
-        tokio::spawn(async move {
-            Self::initiate_load_feed(videos, current_item, &config).await;
-            tx.send(UpdateEvent::Redraw).await;
-        });
+        if let Some(config) = config {
+            let videos = Arc::clone(&new_feed.videos);
+            let current_item = Arc::clone(&new_feed.current_item);
+            tokio::spawn(async move {
+                Self::initiate_load_feed(videos, current_item, &config).await;
+                tx.send(UpdateEvent::Redraw).await;
+            });
+        }
 
         new_feed
     }
 
-    fn empty(tx: UpdateSender, config: Config) -> Self {
+    fn create_empty(_tx: UpdateSender, config: Option<Config>) -> Self {
         let videos = Arc::new(Mutex::new(None));
         let current_item = Arc::new(Mutex::new(0));
 
@@ -46,14 +48,23 @@ impl Feed {
             videos,
             current_item,
 
-            loading_indicator: Box::new(loading_indicator),
+            loading_indicator,
         }
     }
 
-    fn reload_feed(&mut self) -> EventFuture {
-        let videos = Arc::clone(&self.videos);
-        let current_item = Arc::clone(&self.current_item);
-        Self::initiate_load_feed(videos, current_item, &self.config)
+    pub async fn update_with_config(&mut self, config: &Config) {
+        self.config = Some(config.to_owned());
+        self.reload().await
+    }
+
+    fn reload(&mut self) -> EventFuture {
+        if let Some(config) = &self.config {
+            let videos = Arc::clone(&self.videos);
+            let current_item = Arc::clone(&self.current_item);
+            Self::initiate_load_feed(videos, current_item, &config)
+        } else {
+            handled_event()
+        }
     }
 
     fn toggle_current_item(&self) -> EventFuture {
@@ -152,7 +163,7 @@ impl Component for Feed {
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
-                KeyCode::Char('r') => self.reload_feed(),
+                KeyCode::Char('r') => self.reload(),
                 _ => handled_event(),
             }
         } else {

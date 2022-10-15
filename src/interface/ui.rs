@@ -1,4 +1,3 @@
-use crate::config::ConfigHandler;
 use crate::interface::app::App;
 use crate::interface::component::{Backend, Component, UpdateEvent, UpdateSender};
 use crossterm::event::{Event, EventStream};
@@ -10,8 +9,7 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
     let mut event_reader = EventStream::new();
     let (tx, mut rx) = mpsc::channel(100);
 
-    let config_handler = ConfigHandler::load().await.expect("Failed to load config");
-    let mut app = App::new(tx.clone(), config_handler);
+    let mut app: Box<dyn Component> = Box::new(App::new(tx.clone()));
 
     run_draw_cycle(terminal, &mut app);
 
@@ -30,7 +28,7 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
     }
 }
 
-fn handle_event(tx: UpdateSender, app: &mut App, event: Event) {
+fn handle_event(tx: UpdateSender, app: &mut Box<dyn Component>, event: Event) {
     app.handle_event_sync(event.clone());
     let future = app.handle_event(event.clone());
 
@@ -43,7 +41,7 @@ fn handle_event(tx: UpdateSender, app: &mut App, event: Event) {
     });
 }
 
-fn run_draw_cycle(terminal: &mut Terminal<Backend>, app: &mut App) {
+fn run_draw_cycle(terminal: &mut Terminal<Backend>, app: &mut Box<dyn Component>) {
     terminal
         .draw(|f| app.draw(f, f.size()))
         .expect("Failed to draw interface");

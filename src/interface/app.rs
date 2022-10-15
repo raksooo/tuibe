@@ -1,31 +1,66 @@
-use crate::config::{Config, ConfigHandler};
+use crate::config::ConfigHandler;
 use crate::interface::component::{Component, EventFuture, Frame, UpdateEvent, UpdateSender};
 use crate::interface::feed::Feed;
 use crossterm::event::{Event, KeyCode, KeyEvent};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tui::layout::Rect;
 
 pub struct App {
-    config_handler: ConfigHandler,
+    config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
     tx: UpdateSender,
-    pub feed: Box<dyn Component>,
+    pub feed: Arc<Mutex<Feed>>,
 }
 
 impl App {
-    pub fn new(tx: UpdateSender, config_handler: ConfigHandler) -> Self {
-        let feed = Feed::new(tx.clone(), config_handler.config.to_owned());
+    pub fn new(tx: UpdateSender) -> Self {
+        let new_app = Self::create_empty(tx.clone());
+
+        let config_handler = Arc::clone(&new_app.config_handler);
+        let feed = Arc::clone(&new_app.feed);
+        tokio::spawn(async move {
+            {
+                let mut config_handler = config_handler.lock().await;
+                *config_handler = None;
+            }
+
+            let new_config_handler = ConfigHandler::load().await.expect("Failed to load config");
+            let new_config = new_config_handler.config.clone();
+
+            {
+                let mut config_handler = config_handler.lock().await;
+                *config_handler = Some(new_config_handler);
+            }
+
+            {
+                let mut feed = feed.lock().await;
+                feed.update_with_config(&new_config).await;
+            }
+
+            tx.send(UpdateEvent::Redraw).await;
+        });
+
+        new_app
+    }
+
+    fn create_empty(tx: UpdateSender) -> Self {
+        let config_handler = Arc::new(Mutex::new(None));
+        let feed = Arc::new(Mutex::new(Feed::new(tx.clone(), None)));
+
         Self {
             config_handler,
-
             tx,
-            feed: Box::new(feed),
+            feed,
         }
     }
 }
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        self.feed.draw(f, size);
+        if let Ok(mut feed) = self.feed.try_lock() {
+            feed.draw(f, size);
+        }
     }
 
     fn handle_event(&mut self, event: Event) -> EventFuture {
@@ -41,7 +76,11 @@ impl Component for App {
                     .expect("Failed to send quit event");
             })
         } else {
-            self.feed.handle_event(event)
+            let feed = Arc::clone(&self.feed);
+            Box::pin(async move {
+                let mut feed = feed.lock().await;
+                feed.handle_event(event).await;
+            })
         }
     }
 }
