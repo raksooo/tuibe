@@ -37,11 +37,11 @@ impl Feed {
         new_feed
     }
 
-    fn create_empty(_tx: UpdateSender, config: Option<Config>) -> Self {
+    fn create_empty(tx: UpdateSender, config: Option<Config>) -> Self {
         let videos = Arc::new(Mutex::new(None));
         let current_item = Arc::new(Mutex::new(0));
 
-        let loading_indicator = LoadingIndicator::new();
+        let loading_indicator = LoadingIndicator::new(tx.clone());
 
         Self {
             config,
