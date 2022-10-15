@@ -17,7 +17,9 @@ pub enum UpdateEvent {
 pub type UpdateSender = mpsc::Sender<UpdateEvent>;
 
 pub trait Component<P> {
-    fn new(tx: UpdateSender, props: P) -> Self where Self: Sized;
+    fn new(tx: UpdateSender, props: P) -> Self
+    where
+        Self: Sized;
 
     fn draw(&mut self, f: &mut Frame, size: Rect);
 

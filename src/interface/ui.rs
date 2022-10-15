@@ -1,9 +1,9 @@
-use crate::interface::component::{Backend, Component, UpdateEvent, UpdateSender};
-use crate::interface::app::App;
 use crate::config::ConfigHandler;
+use crate::interface::app::App;
+use crate::interface::component::{Backend, Component, UpdateEvent, UpdateSender};
 use crossterm::event::{Event, EventStream};
-use tokio_stream::StreamExt;
 use tokio::{select, sync::mpsc};
+use tokio_stream::StreamExt;
 use tui::Terminal;
 
 pub async fn run(terminal: &mut Terminal<Backend>) {
@@ -13,9 +13,7 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
     let config_handler = ConfigHandler::load().await.expect("Failed to load config");
     let mut app = App::new(tx.clone(), config_handler);
 
-    {
-        run_draw_cycle(terminal, &mut app);
-    }
+    run_draw_cycle(terminal, &mut app);
 
     loop {
         select! {
@@ -39,7 +37,9 @@ fn handle_event(tx: UpdateSender, terminal: &mut Terminal<Backend>, app: &mut Ap
     let tx = tx.clone();
     tokio::spawn(async move {
         future.await;
-        tx.send(UpdateEvent::Redraw).await.expect("Failed to send draw event");
+        tx.send(UpdateEvent::Redraw)
+            .await
+            .expect("Failed to send draw event");
     });
 }
 
