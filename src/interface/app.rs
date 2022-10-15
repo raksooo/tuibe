@@ -1,7 +1,7 @@
 use crate::config::{Config, ConfigHandler};
-use crate::interface::component::{Component, EventFuture, Frame, UpdateSender};
+use crate::interface::component::{Component, EventFuture, Frame, UpdateSender, UpdateEvent};
 use crate::interface::feed::Feed;
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyEvent, KeyCode};
 use tui::layout::Rect;
 
 pub struct App {
@@ -17,7 +17,7 @@ impl Component<ConfigHandler> for App {
         Self {
             config_handler,
 
-            tx: tx,
+            tx,
             feed: Box::new(feed),
         }
     }
@@ -27,6 +27,13 @@ impl Component<ConfigHandler> for App {
     }
 
     fn handle_event(&mut self, event: Event) -> EventFuture {
-        self.feed.handle_event(event)
+        if let Event::Key(KeyEvent { code: KeyCode::Char('q'), .. }) = event {
+            let tx = self.tx.clone();
+            Box::pin(async move {
+                tx.send(UpdateEvent::Quit).await.expect("Failed to send quit event");
+            })
+        } else {
+            self.feed.handle_event(event)
+        }
     }
 }

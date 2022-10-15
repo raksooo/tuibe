@@ -1,7 +1,7 @@
 use crate::interface::component::{Backend, Component, UpdateEvent, UpdateSender};
 use crate::interface::app::App;
 use crate::config::ConfigHandler;
-use crossterm::event::{Event, KeyCode, KeyEvent, EventStream};
+use crossterm::event::{Event, EventStream};
 use tokio_stream::StreamExt;
 use tokio::{select, sync::mpsc};
 use tui::Terminal;
@@ -33,18 +33,14 @@ pub async fn run(terminal: &mut Terminal<Backend>) {
 }
 
 fn handle_event(tx: UpdateSender, terminal: &mut Terminal<Backend>, app: &mut App, event: Event) {
-    if let Event::Key(KeyEvent { code: KeyCode::Char('q'), .. }) = event {
-        tx.try_send(UpdateEvent::Quit).expect("Failed to send quit event");
-    } else {
-        app.handle_event_sync(event.clone());
-        let future = app.handle_event(event.clone());
+    app.handle_event_sync(event.clone());
+    let future = app.handle_event(event.clone());
 
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            future.await;
-            tx.send(UpdateEvent::Redraw).await.expect("Failed to send draw event");
-        });
-    }
+    let tx = tx.clone();
+    tokio::spawn(async move {
+        future.await;
+        tx.send(UpdateEvent::Redraw).await.expect("Failed to send draw event");
+    });
 }
 
 fn run_draw_cycle(terminal: &mut Terminal<Backend>, app: &mut App) {
