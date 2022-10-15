@@ -33,6 +33,8 @@ impl Component for LoadingIndicator {
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center);
 
+            let size = Rect::new((size.width / 2) - 15, (size.height / 2) - 2, 30, 3);
+
             f.render_widget(dialog, size);
 
             // TODO: Don't run if draw is called multiple times in a row

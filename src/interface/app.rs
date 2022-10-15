@@ -1,5 +1,7 @@
 use crate::config::ConfigHandler;
-use crate::interface::component::{Component, EventFuture, EventSender, Frame, UpdateEvent, handled_event};
+use crate::interface::component::{
+    handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent,
+};
 use crate::interface::{feed::Feed, loading_indicator::LoadingIndicator};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use std::sync::Arc;

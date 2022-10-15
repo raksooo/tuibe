@@ -8,7 +8,7 @@ use crossterm::event::{Event, KeyCode};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
@@ -140,19 +140,18 @@ impl Component for Feed {
         if let Ok(current_item) = self.current_item.try_lock() {
             if let Ok(videos) = self.videos.try_lock() {
                 if let Some(ref videos) = *videos {
-                    let chunks = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints(
-                            [Constraint::Percentage(80), Constraint::Percentage(20)].as_ref(),
-                        )
-                        .split(size);
+                    let description_height = 10;
+                    let description_y = size.height - description_height;
+                    let list_size = Rect::new(0, 0, size.width, description_y - 10);
+                    let description_size =
+                        Rect::new(0, description_y, size.width, description_height);
 
                     let width = f.size().width.into();
                     let list = create_list(&videos, *current_item, width);
                     let description = create_description(&videos, *current_item);
 
-                    f.render_widget(list, chunks[0]);
-                    f.render_widget(description, chunks[1]);
+                    f.render_widget(list, list_size);
+                    f.render_widget(description, description_size);
 
                     return;
                 }
