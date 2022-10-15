@@ -11,8 +11,8 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(config_handler: ConfigHandler) -> Self {
-        let feed = Feed::new(&config_handler.config).await;
+    pub fn new(config_handler: ConfigHandler) -> Self {
+        let feed = Feed::new(&config_handler.config);
         Self {
             config_handler,
             feed: Box::new(feed),

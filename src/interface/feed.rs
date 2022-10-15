@@ -1,8 +1,12 @@
 use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
-use crate::interface::component::{Component, Frame};
-use crate::interface::loading_indicator::LoadingIndicator;
+use crate::interface::{
+    component::{Component, Frame},
+    loading_indicator::LoadingIndicator,
+};
 use crossterm::event::{Event, KeyCode};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -10,73 +14,121 @@ use tui::{
 };
 
 pub struct Feed {
-    videos: Option<Vec<Video>>,
-    current_item: usize,
+    config: Config,
+    videos: Arc<Mutex<Option<Vec<Video>>>>,
+    current_item: Arc<Mutex<usize>>,
 
     pub loading_indicator: Box<dyn Component>,
 }
 
 impl Feed {
-    pub async fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Self {
+        let config = config.to_owned();
+        let videos = Arc::new(Mutex::new(None));
+        let current_item = Arc::new(Mutex::new(0));
+
+        Self::initiate_load_feed(Arc::clone(&videos), Arc::clone(&current_item), &config);
+
         Self {
-            // videos: Some(Feed::load_feed_from_config(config).await),
-            videos: None,
-            current_item: 0,
+            config,
+            videos,
+            current_item,
             loading_indicator: Box::new(LoadingIndicator::new()),
         }
     }
 
-    pub async fn reload_feed(&mut self, config: &Config) {
-        self.videos = Some(Feed::load_feed_from_config(config).await);
+    fn reload_feed(&mut self) {
+        let videos = Arc::clone(&self.videos);
+        let current_item = Arc::clone(&self.current_item);
+        Self::initiate_load_feed(videos, current_item, &self.config);
     }
 
-    pub fn toggle_current_item(&mut self) {
-        if let Some(videos) = &mut self.videos {
-            if let Some(video) = videos.get_mut(self.current_item) {
-                video.toggle_selected();
+    fn toggle_current_item(&self) {
+        let videos = Arc::clone(&self.videos);
+        let current_item = Arc::clone(&self.current_item);
+        tokio::spawn(async move {
+            let current_item = current_item.lock().await;
+            if let Some(ref mut videos) = *videos.lock().await {
+                if let Some(video) = videos.get_mut(*current_item) {
+                    video.toggle_selected();
+                }
             }
-        }
+        });
     }
 
-    pub fn move_up(&mut self) {
-        if self.current_item > 0 {
-            self.current_item -= 1;
-        }
-    }
-
-    pub fn move_down(&mut self) {
-        if let Some(videos) = &self.videos {
-            if self.current_item < videos.len() - 1 {
-                self.current_item += 1;
+    fn move_up(&mut self) {
+        let current_item = Arc::clone(&self.current_item);
+        tokio::spawn(async move {
+            let mut current_item = current_item.lock().await;
+            if *current_item > 0 {
+                *current_item = *current_item - 1;
             }
-        }
+        });
     }
 
-    async fn load_feed_from_config(config: &Config) -> Vec<Video> {
-        VideoFeed::from_config(config)
-            .await
-            .expect("Failed to fetch videos")
-            .videos
+    fn move_down(&mut self) {
+        let videos = Arc::clone(&self.videos);
+        let current_item = Arc::clone(&self.current_item);
+        tokio::spawn(async move {
+            if let Some(ref videos) = *videos.lock().await {
+                let mut current_item = current_item.lock().await;
+                *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
+            }
+        });
+    }
+
+    fn initiate_load_feed(
+        videos: Arc<Mutex<Option<Vec<Video>>>>,
+        current_item: Arc<Mutex<usize>>,
+        config: &Config,
+    ) {
+        let config = config.to_owned();
+        tokio::spawn(async move {
+            {
+                let mut videos = videos.lock().await;
+                *videos = None;
+                let mut current_item = current_item.lock().await;
+                *current_item = 0;
+            }
+
+            let new_videos = VideoFeed::from_config(&config)
+                .await
+                .expect("Failed to fetch videos")
+                .videos;
+
+            if new_videos.len() > 0 {
+                let mut videos = videos.lock().await;
+                *videos = Some(new_videos);
+            }
+        });
     }
 }
 
 impl Component for Feed {
-    fn draw<'a>(&mut self, f: &mut Frame<'a>, size: Rect) {
-        if let Some(videos) = &self.videos {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
-                .split(size);
+    fn draw(&mut self, f: &mut Frame, size: Rect) {
+        if let Ok(current_item) = self.current_item.try_lock() {
+            if let Ok(videos) = self.videos.try_lock() {
+                if let Some(ref videos) = *videos {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints(
+                            [Constraint::Percentage(80), Constraint::Percentage(20)].as_ref(),
+                        )
+                        .split(size);
 
-            let width = f.size().width.into();
-            let list = create_list::<'a>(videos, self.current_item, width);
-            let description = create_description::<'a>(videos, self.current_item);
+                    let width = f.size().width.into();
+                    let list = create_list(&videos, *current_item, width);
+                    let description = create_description(&videos, *current_item);
 
-            f.render_widget(list, chunks[0]);
-            f.render_widget(description, chunks[1]);
-        } else {
-            self.loading_indicator.draw(f, size);
+                    f.render_widget(list, chunks[0]);
+                    f.render_widget(description, chunks[1]);
+
+                    return;
+                }
+            }
         }
+
+        self.loading_indicator.draw(f, size);
     }
 
     fn handle_event(&mut self, event: Event) {
@@ -87,14 +139,14 @@ impl Component for Feed {
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
+                KeyCode::Char('r') => self.reload_feed(),
                 _ => (),
-                // KeyCode::Char('r') => self.reload_feed(&self.config_handler.config).await,
             }
         }
     }
 }
 
-fn create_list<'a>(videos: &Vec<Video>, current_item: usize, width: usize) -> List<'a> {
+fn create_list(videos: &Vec<Video>, current_item: usize, width: usize) -> List<'_> {
     let mut items: Vec<ListItem> = Vec::new();
 
     for (i, video) in videos.iter().enumerate() {
@@ -110,7 +162,7 @@ fn create_list<'a>(videos: &Vec<Video>, current_item: usize, width: usize) -> Li
         .style(Style::default().fg(Color::White))
 }
 
-fn create_description<'a>(videos: &Vec<Video>, current_item: usize) -> Paragraph<'a> {
+fn create_description(videos: &Vec<Video>, current_item: usize) -> Paragraph<'_> {
     let description = videos
         .get(current_item)
         .unwrap()
