@@ -8,11 +8,11 @@ pub struct App {
     config_handler: ConfigHandler,
 
     tx: UpdateSender,
-    pub feed: Box<dyn Component<Config>>,
+    pub feed: Box<dyn Component>,
 }
 
-impl Component<ConfigHandler> for App {
-    fn new(tx: UpdateSender, config_handler: ConfigHandler) -> Self {
+impl App {
+    pub fn new(tx: UpdateSender, config_handler: ConfigHandler) -> Self {
         let feed = Feed::new(tx.clone(), config_handler.config.to_owned());
         Self {
             config_handler,
@@ -21,7 +21,9 @@ impl Component<ConfigHandler> for App {
             feed: Box::new(feed),
         }
     }
+}
 
+impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         self.feed.draw(f, size);
     }

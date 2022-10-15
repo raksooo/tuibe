@@ -18,15 +18,28 @@ pub struct Feed {
     videos: Arc<Mutex<Option<Vec<Video>>>>,
     current_item: Arc<Mutex<usize>>,
 
-    pub loading_indicator: Box<dyn Component<()>>,
+    pub loading_indicator: Box<dyn Component>,
 }
 
 impl Feed {
+    pub fn new(tx: UpdateSender, config: Config) -> Self {
+        let new_feed = Self::empty(tx.clone(), config.clone());
+
+        let videos = Arc::clone(&new_feed.videos);
+        let current_item = Arc::clone(&new_feed.current_item);
+        tokio::spawn(async move {
+            Self::initiate_load_feed(videos, current_item, &config).await;
+            tx.send(UpdateEvent::Redraw).await;
+        });
+
+        new_feed
+    }
+
     fn empty(tx: UpdateSender, config: Config) -> Self {
         let videos = Arc::new(Mutex::new(None));
         let current_item = Arc::new(Mutex::new(0));
 
-        let loading_indicator = LoadingIndicator::new(tx.clone(), ());
+        let loading_indicator = LoadingIndicator::new();
 
         Self {
             config,
@@ -104,20 +117,7 @@ impl Feed {
     }
 }
 
-impl Component<Config> for Feed {
-    fn new(tx: UpdateSender, config: Config) -> Self {
-        let new_feed = Self::empty(tx.clone(), config.clone());
-
-        let videos = Arc::clone(&new_feed.videos);
-        let current_item = Arc::clone(&new_feed.current_item);
-        tokio::spawn(async move {
-            Self::initiate_load_feed(videos, current_item, &config).await;
-            tx.send(UpdateEvent::Redraw).await;
-        });
-
-        new_feed
-    }
-
+impl Component for Feed {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         if let Ok(current_item) = self.current_item.try_lock() {
             if let Ok(videos) = self.videos.try_lock() {
