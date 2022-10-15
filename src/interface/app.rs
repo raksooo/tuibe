@@ -1,5 +1,5 @@
 use crate::config::ConfigHandler;
-use crate::interface::component::{Component, Frame};
+use crate::interface::component::{Component, EventFuture, Frame};
 use crate::interface::feed::Feed;
 use crossterm::event::Event;
 use tui::layout::Rect;
@@ -25,8 +25,7 @@ impl Component for App {
         self.feed.draw(f, size);
     }
 
-    // TODO: Spawn process for reloading feed. Shouldn't block.
-    fn handle_event(&mut self, event: Event) {
-        self.feed.handle_event(event);
+    fn handle_event(&mut self, event: Event) -> EventFuture {
+        self.feed.handle_event(event)
     }
 }

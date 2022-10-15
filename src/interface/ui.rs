@@ -20,7 +20,8 @@ pub fn run(terminal: &mut Terminal<Backend>, app: &mut App) {
             {
                 break;
             } else {
-                app.handle_event(event);
+                let future = app.handle_event(event);
+                tokio::spawn(future);
             }
         }
     }

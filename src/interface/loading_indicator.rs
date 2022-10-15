@@ -1,5 +1,4 @@
 use crate::interface::component::{Component, Frame};
-use crossterm::event::Event;
 use tui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
@@ -12,9 +11,7 @@ pub struct LoadingIndicator {
 
 impl LoadingIndicator {
     pub fn new() -> Self {
-        Self {
-            dots: 0,
-        }
+        Self { dots: 0 }
     }
 }
 
@@ -31,9 +28,5 @@ impl Component for LoadingIndicator {
         f.render_widget(dialog, size);
 
         self.dots = (self.dots + 1) % 4;
-    }
-
-    fn handle_event(&mut self, _event: Event) {
-        ()
     }
 }

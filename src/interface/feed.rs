@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::{
-    component::{Component, Frame},
+    component::{handled_event, Component, EventFuture, Frame},
     loading_indicator::LoadingIndicator,
 };
 use crossterm::event::{Event, KeyCode};
@@ -27,7 +27,11 @@ impl Feed {
         let videos = Arc::new(Mutex::new(None));
         let current_item = Arc::new(Mutex::new(0));
 
-        Self::initiate_load_feed(Arc::clone(&videos), Arc::clone(&current_item), &config);
+        tokio::spawn(Self::initiate_load_feed(
+            Arc::clone(&videos),
+            Arc::clone(&current_item),
+            &config,
+        ));
 
         Self {
             config,
@@ -37,53 +41,53 @@ impl Feed {
         }
     }
 
-    fn reload_feed(&mut self) {
+    fn reload_feed(&mut self) -> EventFuture {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
-        Self::initiate_load_feed(videos, current_item, &self.config);
+        Self::initiate_load_feed(videos, current_item, &self.config)
     }
 
-    fn toggle_current_item(&self) {
+    fn toggle_current_item(&self) -> EventFuture {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
-        tokio::spawn(async move {
+        Box::pin(async move {
             let current_item = current_item.lock().await;
             if let Some(ref mut videos) = *videos.lock().await {
                 if let Some(video) = videos.get_mut(*current_item) {
                     video.toggle_selected();
                 }
             }
-        });
+        })
     }
 
-    fn move_up(&mut self) {
+    fn move_up(&mut self) -> EventFuture {
         let current_item = Arc::clone(&self.current_item);
-        tokio::spawn(async move {
+        Box::pin(async move {
             let mut current_item = current_item.lock().await;
             if *current_item > 0 {
                 *current_item = *current_item - 1;
             }
-        });
+        })
     }
 
-    fn move_down(&mut self) {
+    fn move_down(&mut self) -> EventFuture {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
-        tokio::spawn(async move {
+        Box::pin(async move {
             if let Some(ref videos) = *videos.lock().await {
                 let mut current_item = current_item.lock().await;
                 *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
             }
-        });
+        })
     }
 
     fn initiate_load_feed(
         videos: Arc<Mutex<Option<Vec<Video>>>>,
         current_item: Arc<Mutex<usize>>,
         config: &Config,
-    ) {
+    ) -> EventFuture {
         let config = config.to_owned();
-        tokio::spawn(async move {
+        Box::pin(async move {
             {
                 let mut videos = videos.lock().await;
                 *videos = None;
@@ -100,7 +104,7 @@ impl Feed {
                 let mut videos = videos.lock().await;
                 *videos = Some(new_videos);
             }
-        });
+        })
     }
 }
 
@@ -131,7 +135,7 @@ impl Component for Feed {
         self.loading_indicator.draw(f, size);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event) -> EventFuture {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char(' ') => self.toggle_current_item(),
@@ -140,8 +144,10 @@ impl Component for Feed {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char('r') => self.reload_feed(),
-                _ => (),
+                _ => handled_event(),
             }
+        } else {
+            handled_event()
         }
     }
 }
@@ -163,11 +169,7 @@ fn create_list(videos: &Vec<Video>, current_item: usize, width: usize) -> List<'
 }
 
 fn create_description(videos: &Vec<Video>, current_item: usize) -> Paragraph<'_> {
-    let description = videos
-        .get(current_item)
-        .unwrap()
-        .description
-        .to_owned();
+    let description = videos.get(current_item).unwrap().description.to_owned();
 
     Paragraph::new(description)
         .block(Block::default().title("Description").borders(Borders::ALL))
