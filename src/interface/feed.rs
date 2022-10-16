@@ -195,6 +195,7 @@ fn create_list(videos: &Vec<Video>, current_item: usize, width: usize) -> List<'
 }
 
 fn create_description(videos: &Vec<Video>, current_item: usize) -> Paragraph<'_> {
+    // current_item is always within the bounds of videos
     let description = videos.get(current_item).unwrap().description.to_owned();
 
     Paragraph::new(description)

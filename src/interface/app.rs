@@ -2,14 +2,14 @@ use crate::config::ConfigHandler;
 use crate::interface::component::{
     handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent,
 };
-use crate::interface::{feed::Feed, loading_indicator::LoadingIndicator};
+use crate::interface::{dialog, feed::Feed, loading_indicator::LoadingIndicator};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tui::layout::Rect;
 
 pub struct App {
-    config_handler: Arc<Mutex<Option<ConfigHandler>>>,
+    config_handler: Arc<Mutex<Result<Option<ConfigHandler>, ()>>>,
 
     pub loading_indicator: LoadingIndicator,
     pub feed: Arc<Mutex<Feed>>,
@@ -24,20 +24,22 @@ impl App {
         tokio::spawn(async move {
             {
                 let mut config_handler = config_handler.lock().await;
-                *config_handler = None;
+                *config_handler = Ok(None);
             }
 
-            let new_config_handler = ConfigHandler::load().await.expect("Failed to load config");
-            let new_config = new_config_handler.config.clone();
-
-            {
+            if let Ok(new_config_handler) = ConfigHandler::load().await {
+                let new_config = new_config_handler.config.clone();
+                {
+                    let mut config_handler = config_handler.lock().await;
+                    *config_handler = Ok(Some(new_config_handler));
+                }
+                {
+                    let mut feed = feed.lock().await;
+                    feed.update_with_config(&new_config).await;
+                }
+            } else {
                 let mut config_handler = config_handler.lock().await;
-                *config_handler = Some(new_config_handler);
-            }
-
-            {
-                let mut feed = feed.lock().await;
-                feed.update_with_config(&new_config).await;
+                *config_handler = Err(());
             }
 
             tx.send(UpdateEvent::Redraw).await;
@@ -47,7 +49,7 @@ impl App {
     }
 
     fn create_empty(tx: EventSender) -> Self {
-        let config_handler = Arc::new(Mutex::new(None));
+        let config_handler = Arc::new(Mutex::new(Ok(None)));
         let feed = Arc::new(Mutex::new(Feed::new(tx.clone(), None)));
         let loading_indicator = LoadingIndicator::new(tx);
 
@@ -61,11 +63,19 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        if let Ok(mut feed) = self.feed.try_lock() {
-            feed.draw(f, size);
-        } else {
-            self.loading_indicator.draw(f, size);
+        if let Ok(config_handler) = self.config_handler.try_lock() {
+            if let Ok(_) = *config_handler {
+                if let Ok(mut feed) = self.feed.try_lock() {
+                    feed.draw(f, size);
+                    return;
+                } else {
+                    self.loading_indicator.draw(f, size);
+                    return;
+                }
+            }
         }
+
+        dialog::dialog(f, size, "Something went wrong..");
     }
 
     fn handle_event(&mut self, event: Event) -> EventFuture {
