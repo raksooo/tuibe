@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::feed::{Feed as VideoFeed, Video};
 use crate::interface::{
     component::{handled_event_none, Component, EventFuture, EventSender, Frame, UpdateEvent},
+    dialog,
     loading_indicator::LoadingIndicator,
 };
 use crossterm::event::{Event, KeyCode};
@@ -15,7 +16,7 @@ use tui::{
 
 pub struct Feed {
     config: Option<Config>,
-    videos: Arc<Mutex<Option<Vec<Video>>>>,
+    videos: Arc<Mutex<Result<Option<Vec<Video>>, ()>>>,
     current_item: Arc<Mutex<usize>>,
 
     tx: EventSender,
@@ -38,7 +39,7 @@ impl Feed {
     }
 
     fn create_empty(tx: EventSender, config: Option<Config>) -> Self {
-        let videos = Arc::new(Mutex::new(None));
+        let videos = Arc::new(Mutex::new(Ok(None)));
         let current_item = Arc::new(Mutex::new(0));
 
         let loading_indicator = LoadingIndicator::new(tx.clone());
@@ -67,21 +68,26 @@ impl Feed {
             Box::pin(async move {
                 {
                     let mut videos = videos.lock().await;
-                    *videos = None;
+                    *videos = Ok(None);
                     let mut current_item = current_item.lock().await;
                     *current_item = 0;
                 }
 
                 tx.send(UpdateEvent::Redraw).await;
 
-                let new_videos = VideoFeed::from_config(&config)
-                    .await
-                    .expect("Failed to fetch videos")
-                    .videos;
-
-                if new_videos.len() > 0 {
-                    let mut videos = videos.lock().await;
-                    *videos = Some(new_videos);
+                let new_videos = VideoFeed::from_config(&config).await;
+                let mut videos = videos.lock().await;
+                if let Ok(VideoFeed {
+                    videos: new_videos, ..
+                }) = new_videos
+                {
+                    if new_videos.len() > 0 {
+                        *videos = Ok(Some(new_videos));
+                    } else {
+                        *videos = Ok(None);
+                    }
+                } else {
+                    *videos = Err(());
                 }
 
                 UpdateEvent::Redraw
@@ -96,7 +102,7 @@ impl Feed {
         let current_item = Arc::clone(&self.current_item);
         Box::pin(async move {
             let current_item = current_item.lock().await;
-            if let Some(ref mut videos) = *videos.lock().await {
+            if let Ok(Some(ref mut videos)) = *videos.lock().await {
                 if let Some(video) = videos.get_mut(*current_item) {
                     video.toggle_selected();
                     return UpdateEvent::Redraw;
@@ -124,7 +130,7 @@ impl Feed {
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
         Box::pin(async move {
-            if let Some(ref videos) = *videos.lock().await {
+            if let Ok(Some(ref videos)) = *videos.lock().await {
                 let mut current_item = current_item.lock().await;
                 *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
                 UpdateEvent::Redraw
@@ -139,26 +145,30 @@ impl Component for Feed {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         if let Ok(current_item) = self.current_item.try_lock() {
             if let Ok(videos) = self.videos.try_lock() {
-                if let Some(ref videos) = *videos {
-                    let description_height = 10;
-                    let description_y = size.height - description_height;
-                    let list_size = Rect::new(0, 0, size.width, description_y - 10);
-                    let description_size =
-                        Rect::new(0, description_y, size.width, description_height);
+                if let Ok(ref videos) = *videos {
+                    if let Some(videos) = videos {
+                        let description_height = 10;
+                        let description_y = size.height - description_height;
+                        let list_size = Rect::new(0, 0, size.width, description_y - 10);
+                        let description_size =
+                            Rect::new(0, description_y, size.width, description_height);
 
-                    let width = f.size().width.into();
-                    let list = create_list(&videos, *current_item, width);
-                    let description = create_description(&videos, *current_item);
+                        let width = f.size().width.into();
+                        let list = create_list(&videos, *current_item, width);
+                        let description = create_description(&videos, *current_item);
 
-                    f.render_widget(list, list_size);
-                    f.render_widget(description, description_size);
-
-                    return;
+                        f.render_widget(list, list_size);
+                        f.render_widget(description, description_size);
+                        return;
+                    } else {
+                        self.loading_indicator.draw(f, size);
+                        return;
+                    }
                 }
             }
         }
 
-        self.loading_indicator.draw(f, size);
+        dialog::dialog(f, size, "Something went wrong..");
     }
 
     fn handle_event(&mut self, event: Event) -> EventFuture {
