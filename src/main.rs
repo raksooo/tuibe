@@ -3,7 +3,7 @@ mod error;
 mod feed;
 mod interface;
 
-use interface::ui;
+use interface::{app::App, ui};
 
 use crossterm::{
     execute,
@@ -20,7 +20,7 @@ async fn main() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::run(&mut terminal).await;
+    ui::create(&mut terminal, |tx| App::new(tx)).await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");
