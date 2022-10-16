@@ -1,8 +1,7 @@
 use crate::error::ConfigError;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::io;
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 use tokio::{fs, fs::File, io::AsyncWriteExt};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -87,7 +86,7 @@ impl ConfigHandler {
     }
 
     async fn write_config_to_path(path: &PathBuf, config: &Config) -> Result<(), ConfigError> {
-        let toml = toml::to_string(config).expect("Failed to serialize config");
+        let toml = toml::to_string(config).map_err(|_| ConfigError::SerializeConfig)?;
         let mut file = File::create(path)
             .await
             .map_err(|_| ConfigError::CreateConfigFile)?;
@@ -101,7 +100,7 @@ impl ConfigHandler {
     }
 
     async fn ensure_config_dir_exists() -> Result<PathBuf, ConfigError> {
-        let dir = Self::find_config_dir();
+        let dir = Self::find_config_dir()?;
         fs::create_dir_all(&dir)
             .await
             .map_err(|_| ConfigError::CreateConfigDir)?;
@@ -109,19 +108,19 @@ impl ConfigHandler {
         Ok(dir)
     }
 
-    fn find_config_dir() -> PathBuf {
+    fn find_config_dir() -> Result<PathBuf, ConfigError> {
         let mut path = PathBuf::new();
 
         match std::env::var("XDG_CONFIG_HOME") {
             Ok(config_dir) => path.push(config_dir),
             _ => {
-                let home = std::env::var("HOME").expect("No HOME or XDG_CONFIG_HOME env var set");
+                let home = std::env::var("HOME").map_err(|_| ConfigError::FindConfigDir)?;
                 path.push(home);
                 path.push(".config".to_string());
             }
         }
 
         path.push("youtuibe");
-        path
+        Ok(path)
     }
 }

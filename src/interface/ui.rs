@@ -14,7 +14,9 @@ where
 
     let mut root = creator(tx.clone());
 
-    tx.send(UpdateEvent::Redraw).await;
+    tx.send(UpdateEvent::Redraw)
+        .await
+        .expect("Failed to send update event");
     loop {
         select! {
             Some(event) = rx.recv() => {
@@ -22,7 +24,7 @@ where
                     UpdateEvent::Redraw => perform_draw(terminal, &mut root),
                     UpdateEvent::Quit => break,
                     UpdateEvent::None => (),
-                };
+                }
             },
             Some(Ok(event)) = event_reader.next() => handle_event(tx.clone(), &mut root, event),
         };
@@ -37,7 +39,7 @@ where
     tokio::spawn(async move {
         let event = future.await;
         if event != UpdateEvent::None {
-            tx.send(event).await.expect("Failed to send draw event");
+            let _ = tx.send(event).await;
         }
     });
 }
@@ -48,5 +50,5 @@ where
 {
     terminal
         .draw(|f| root.draw(f, f.size()))
-        .expect("Failed to draw interface");
+        .expect("Failed to draw");
 }

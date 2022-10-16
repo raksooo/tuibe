@@ -1,9 +1,11 @@
-use crate::config::Config;
-use crate::feed::{Feed as VideoFeed, Video};
-use crate::interface::{
-    component::{handled_event_none, Component, EventFuture, EventSender, Frame, UpdateEvent},
-    dialog,
-    loading_indicator::LoadingIndicator,
+use crate::{
+    config::Config,
+    feed::{Feed as VideoFeed, Video},
+    interface::{
+        component::{handled_event_none, Component, EventFuture, EventSender, Frame, UpdateEvent},
+        dialog,
+        loading_indicator::LoadingIndicator,
+    },
 };
 use crossterm::event::{Event, KeyCode};
 use std::sync::Arc;
@@ -31,7 +33,7 @@ impl Feed {
             let reload_future = new_feed.reload();
             tokio::spawn(async move {
                 let event = reload_future.await;
-                tx.send(event).await;
+                let _ = tx.send(event).await;
             });
         }
 
@@ -73,7 +75,7 @@ impl Feed {
                     *current_item = 0;
                 }
 
-                tx.send(UpdateEvent::Redraw).await;
+                let _ = tx.send(UpdateEvent::Redraw).await;
 
                 let new_videos = VideoFeed::from_config(&config).await;
                 let mut videos = videos.lock().await;

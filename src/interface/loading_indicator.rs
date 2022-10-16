@@ -1,5 +1,7 @@
-use crate::interface::component::{Component, EventSender, Frame, UpdateEvent};
-use crate::interface::dialog;
+use crate::interface::{
+    component::{Component, EventSender, Frame, UpdateEvent},
+    dialog,
+};
 use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -31,7 +33,7 @@ impl LoadingIndicator {
                 *dots += 1;
                 *dots %= 4;
             }
-            tx.send(UpdateEvent::Redraw).await;
+            let _ = tx.send(UpdateEvent::Redraw).await;
         });
     }
 }

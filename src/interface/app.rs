@@ -1,8 +1,12 @@
-use crate::config::ConfigHandler;
-use crate::interface::component::{
-    handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent,
+use crate::{
+    config::ConfigHandler,
+    interface::{
+        component::{handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent},
+        dialog,
+        feed::Feed,
+        loading_indicator::LoadingIndicator,
+    },
 };
-use crate::interface::{dialog, feed::Feed, loading_indicator::LoadingIndicator};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -42,7 +46,7 @@ impl App {
                 *config_handler = Err(());
             }
 
-            tx.send(UpdateEvent::Redraw).await;
+            let _ = tx.send(UpdateEvent::Redraw).await;
         });
 
         new_app
