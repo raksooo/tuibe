@@ -7,12 +7,13 @@ use crate::{
         loading_indicator::LoadingIndicator,
     },
 };
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tui::layout::Rect;
 
 pub struct App {
+    show_subscriptions: Arc<Mutex<bool>>,
     config_handler: Arc<Mutex<Result<Option<ConfigHandler>, ()>>>,
 
     tx: EventSender,
@@ -59,11 +60,28 @@ impl App {
         let loading_indicator = LoadingIndicator::new(tx.clone());
 
         Self {
+            show_subscriptions: Arc::new(Mutex::new(false)),
             config_handler,
+
             tx,
             loading_indicator,
             feed,
         }
+    }
+
+    fn quit(&self) -> EventFuture {
+        let tx = self.tx.clone();
+        Box::pin(async move {
+            let _ = tx.send(UpdateEvent::Quit).await;
+        })
+    }
+
+    fn toggle_show_subscriptions(&self) -> EventFuture {
+        let show_subscriptions = Arc::clone(&self.show_subscriptions);
+        Box::pin(async move {
+            let mut show_subscriptions = show_subscriptions.lock().await;
+            *show_subscriptions = !*show_subscriptions;
+        })
     }
 }
 
@@ -73,33 +91,30 @@ impl Component for App {
             if let Ok(_) = *config_handler {
                 if let Ok(mut feed) = self.feed.try_lock() {
                     feed.draw(f, size);
-                    return;
                 } else {
                     self.loading_indicator.draw(f, size);
-                    return;
                 }
+            } else {
+                dialog::dialog(f, size, "Something went wrong..");
             }
+        } else {
+            dialog::dialog(f, size, "Something went wrong..");
         }
-
-        dialog::dialog(f, size, "Something went wrong..");
     }
 
     fn handle_event(&mut self, event: Event) -> EventFuture {
-        if let Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            ..
-        }) = event
-        {
-            let tx = self.tx.clone();
-            Box::pin(async move {
-                let _ = tx.send(UpdateEvent::Quit).await;
-            })
-        } else {
-            let feed = Arc::clone(&self.feed);
-            Box::pin(async move {
-                let mut feed = feed.lock().await;
-                feed.handle_event(event).await;
-            })
+        if let Event::Key(event) = event {
+            match event.code {
+                KeyCode::Char('q') => return self.quit(),
+                KeyCode::Char('s') => return self.toggle_show_subscriptions(),
+                _ => (),
+            }
         }
+
+        let feed = Arc::clone(&self.feed);
+        Box::pin(async move {
+            let mut feed = feed.lock().await;
+            feed.handle_event(event).await;
+        })
     }
 }
