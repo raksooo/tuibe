@@ -1,7 +1,7 @@
 use crate::{
     config::ConfigHandler,
     interface::{
-        component::{handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent},
+        component::{Component, EventFuture, EventSender, Frame, UpdateEvent},
         dialog,
         feed::Feed,
         loading_indicator::LoadingIndicator,
@@ -15,8 +15,9 @@ use tui::layout::Rect;
 pub struct App {
     config_handler: Arc<Mutex<Result<Option<ConfigHandler>, ()>>>,
 
-    pub loading_indicator: LoadingIndicator,
-    pub feed: Arc<Mutex<Feed>>,
+    tx: EventSender,
+    loading_indicator: LoadingIndicator,
+    feed: Arc<Mutex<Feed>>,
 }
 
 impl App {
@@ -55,10 +56,11 @@ impl App {
     fn create_empty(tx: EventSender) -> Self {
         let config_handler = Arc::new(Mutex::new(Ok(None)));
         let feed = Arc::new(Mutex::new(Feed::new(tx.clone(), None)));
-        let loading_indicator = LoadingIndicator::new(tx);
+        let loading_indicator = LoadingIndicator::new(tx.clone());
 
         Self {
             config_handler,
+            tx,
             loading_indicator,
             feed,
         }
@@ -88,12 +90,15 @@ impl Component for App {
             ..
         }) = event
         {
-            handled_event(UpdateEvent::Quit)
+            let tx = self.tx.clone();
+            Box::pin(async move {
+                let _ = tx.send(UpdateEvent::Quit).await;
+            })
         } else {
             let feed = Arc::clone(&self.feed);
             Box::pin(async move {
                 let mut feed = feed.lock().await;
-                feed.handle_event(event).await
+                feed.handle_event(event).await;
             })
         }
     }

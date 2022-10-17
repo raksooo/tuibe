@@ -1,5 +1,8 @@
 use crate::interface::component::{Backend, Component, EventSender, UpdateEvent};
 use crossterm::event::{Event, EventStream};
+use futures_timer::Delay;
+use std::io;
+use std::time::Duration;
 use tokio::{select, sync::mpsc};
 use tokio_stream::StreamExt;
 use tui::Terminal;
@@ -13,41 +16,34 @@ where
     let (tx, mut rx) = mpsc::channel(100);
 
     let mut root = creator(tx.clone());
-
     tx.send(UpdateEvent::Redraw)
         .await
         .expect("Failed to send update event");
     loop {
         select! {
-            Some(event) = rx.recv() => {
-                match event {
-                    UpdateEvent::Redraw => perform_draw(terminal, &mut root),
-                    UpdateEvent::Quit => break,
-                    UpdateEvent::None => (),
+            event = event_reader.next() => handle_input_event(&mut root, event),
+            event = rx.recv() => {
+                if let Some(event) = event {
+                    match event {
+                        UpdateEvent::Redraw => perform_draw(terminal, &mut root),
+                        UpdateEvent::Quit => break,
+                        UpdateEvent::None => (),
+                    }
                 }
             },
-            Some(Ok(event)) = event_reader.next() => handle_event(tx.clone(), &mut root, event),
+            // TODO: Remove (helpful if event are broken)
+            _ = Delay::new(Duration::from_millis(20000)) => break,
         };
     }
 }
 
-fn handle_event<C>(tx: EventSender, root: &mut C, event: Event)
-where
-    C: Component,
-{
-    let future = root.handle_event(event.clone());
-    tokio::spawn(async move {
-        let event = future.await;
-        if event != UpdateEvent::None {
-            let _ = tx.send(event).await;
-        }
-    });
+fn handle_input_event(root: &mut impl Component, event: Option<Result<Event, io::Error>>) {
+    if let Some(Ok(event)) = event {
+        tokio::spawn(root.handle_event(event));
+    }
 }
 
-fn perform_draw<C>(terminal: &mut Terminal<Backend>, root: &mut C)
-where
-    C: Component,
-{
+fn perform_draw(terminal: &mut Terminal<Backend>, root: &mut impl Component) {
     terminal
         .draw(|f| root.draw(f, f.size()))
         .expect("Failed to draw");

@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     feed::{Feed as VideoFeed, Video},
     interface::{
-        component::{handled_event_none, Component, EventFuture, EventSender, Frame, UpdateEvent},
+        component::{handled_event, Component, EventFuture, EventSender, Frame, UpdateEvent},
         dialog,
         loading_indicator::LoadingIndicator,
     },
@@ -22,7 +22,7 @@ pub struct Feed {
     current_item: Arc<Mutex<usize>>,
 
     tx: EventSender,
-    pub loading_indicator: LoadingIndicator,
+    loading_indicator: LoadingIndicator,
 }
 
 impl Feed {
@@ -31,10 +31,7 @@ impl Feed {
 
         if config.is_some() {
             let reload_future = new_feed.reload();
-            tokio::spawn(async move {
-                let event = reload_future.await;
-                let _ = tx.send(event).await;
-            });
+            tokio::spawn(reload_future);
         }
 
         new_feed
@@ -92,14 +89,15 @@ impl Feed {
                     *videos = Err(());
                 }
 
-                UpdateEvent::Redraw
+                let _ = tx.send(UpdateEvent::Redraw).await;
             })
         } else {
-            handled_event_none()
+            handled_event()
         }
     }
 
     fn toggle_current_item(&self) -> EventFuture {
+        let tx = self.tx.clone();
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
         Box::pin(async move {
@@ -107,37 +105,33 @@ impl Feed {
             if let Ok(Some(ref mut videos)) = *videos.lock().await {
                 if let Some(video) = videos.get_mut(*current_item) {
                     video.toggle_selected();
-                    return UpdateEvent::Redraw;
+                    let _ = tx.send(UpdateEvent::Redraw).await;
                 }
             }
-
-            UpdateEvent::None
         })
     }
 
     fn move_up(&mut self) -> EventFuture {
+        let tx = self.tx.clone();
         let current_item = Arc::clone(&self.current_item);
         Box::pin(async move {
             let mut current_item = current_item.lock().await;
             if *current_item > 0 {
                 *current_item = *current_item - 1;
-                UpdateEvent::Redraw
-            } else {
-                UpdateEvent::None
+                let _ = tx.send(UpdateEvent::Redraw).await;
             }
         })
     }
 
     fn move_down(&mut self) -> EventFuture {
+        let tx = self.tx.clone();
         let videos = Arc::clone(&self.videos);
         let current_item = Arc::clone(&self.current_item);
         Box::pin(async move {
             if let Ok(Some(ref videos)) = *videos.lock().await {
                 let mut current_item = current_item.lock().await;
                 *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
-                UpdateEvent::Redraw
-            } else {
-                UpdateEvent::None
+                let _ = tx.send(UpdateEvent::Redraw).await;
             }
         })
     }
@@ -182,10 +176,10 @@ impl Component for Feed {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char('r') => self.reload(),
-                _ => handled_event_none(),
+                _ => handled_event(),
             }
         } else {
-            handled_event_none()
+            handled_event()
         }
     }
 }
