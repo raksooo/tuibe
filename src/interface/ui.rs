@@ -39,7 +39,7 @@ where
 
 fn handle_input_event(root: &mut impl Component, event: Option<Result<Event, io::Error>>) {
     if let Some(Ok(event)) = event {
-        tokio::spawn(root.handle_event(event));
+        root.handle_event(event);
     }
 }
 

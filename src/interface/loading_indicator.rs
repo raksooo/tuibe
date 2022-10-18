@@ -3,8 +3,10 @@ use crate::interface::{
     dialog,
 };
 use futures_timer::Delay;
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tui::layout::Rect;
 
 pub struct LoadingIndicator {
@@ -29,7 +31,7 @@ impl LoadingIndicator {
         tokio::spawn(async move {
             Delay::new(Duration::from_millis(500)).await;
             {
-                let mut dots = dots.lock().await;
+                let mut dots = dots.lock().unwrap();
                 *dots += 1;
                 *dots %= 4;
             }
@@ -40,13 +42,13 @@ impl LoadingIndicator {
 
 impl Component for LoadingIndicator {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        if let Ok(dots) = self.dots.try_lock() {
-            let dots = format!("{:.<n$}", "", n = dots);
-            let dots_with_padding = format!("{:<3}", dots);
-            let text = format!("Loading{dots_with_padding}");
+        let dots = self.dots.lock().unwrap();
+        let dots_string = format!("{:.<n$}", "", n = dots);
+        let dots_with_padding = format!("{:<3}", dots_string);
+        let text = format!("Loading{dots_with_padding}");
 
-            dialog::dialog(f, size, &text);
-            self.after_draw();
-        }
+        dialog::dialog(f, size, &text);
+
+        self.after_draw();
     }
 }
