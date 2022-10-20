@@ -1,7 +1,14 @@
-use crate::error::ConfigError;
+use crate::{
+    error::{ConfigError, FeedError},
+    video::Video,
+};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::{io, path::PathBuf};
+use std::{
+    collections::{BTreeSet, HashMap},
+    io,
+    path::PathBuf,
+};
 use tokio::{fs, fs::File, io::AsyncWriteExt};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,9 +28,71 @@ impl Default for Config {
     }
 }
 
+pub struct ConfigData {
+    pub channels: HashMap<String, String>,
+    pub videos: BTreeSet<Video>,
+}
+
+impl ConfigData {
+    pub async fn from_config(config: &Config) -> Result<ConfigData, FeedError> {
+        let channels: HashMap<String, String> = HashMap::new();
+        let videos: BTreeSet<Video> = BTreeSet::new();
+
+        let mut new_config_data = ConfigData { channels, videos };
+
+        for channel_url in config.subscriptions.iter() {
+            new_config_data
+                .add_subscription(&channel_url, config)
+                .await?;
+        }
+
+        Ok(new_config_data)
+    }
+
+    pub async fn add_subscription(&mut self, url: &str, config: &Config) -> Result<(), FeedError> {
+        let rss = Self::fetch_rss(url).await?;
+        let author = rss.title().as_str();
+        self.channels.insert(url.to_string(), author.to_string());
+
+        let channel_videos = Self::parse_videos(rss).await?;
+        for mut video in channel_videos {
+            video.select_if_newer(config.last_played_timestamp);
+            self.videos.insert(video);
+        }
+
+        Ok(())
+    }
+
+    pub fn remove_subscription(&mut self, url: &str) {
+        self.channels.remove(url);
+        // TODO: Remove videos from channel
+    }
+
+    async fn parse_videos(rss: atom_syndication::Feed) -> Result<Vec<Video>, FeedError> {
+        let author = rss.title().as_str();
+        rss.entries()
+            .iter()
+            .map(|entry| Video::from_rss_entry(entry, author))
+            .collect()
+    }
+
+    async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, FeedError> {
+        let content = reqwest::get(url)
+            .await
+            .map_err(|_| FeedError::FetchFeed)?
+            .bytes()
+            .await
+            .map_err(|_| FeedError::FetchFeed)?;
+
+        atom_syndication::Feed::read_from(&content[..])
+            .map_err(|error| FeedError::ReadFeed { error })
+    }
+}
+
 pub struct ConfigHandler {
     path: PathBuf,
     pub config: Config,
+    pub config_data: Option<ConfigData>,
 }
 
 impl ConfigHandler {
@@ -33,7 +102,16 @@ impl ConfigHandler {
 
         let config = Self::read_config(&path).await?;
 
-        Ok(ConfigHandler { path, config })
+        Ok(ConfigHandler {
+            path,
+            config,
+            config_data: None,
+        })
+    }
+
+    pub async fn fetch(&mut self) -> Result<(), ConfigError> {
+        self.config_data = Some(ConfigData::from_config(&self.config).await?);
+        Ok(())
     }
 
     pub async fn set_player(&mut self, player: &str) -> Result<(), ConfigError> {
@@ -49,12 +127,18 @@ impl ConfigHandler {
         self.write_config(&self.config).await
     }
 
-    pub async fn add_subscription(&mut self, subscription: String) -> Result<(), ConfigError> {
-        self.config.subscriptions.push(subscription);
-        self.write_config(&self.config).await
+    pub async fn add_subscription(&mut self, subscription: &str) -> Result<(), ConfigError> {
+        self.config.subscriptions.push(subscription.to_string());
+        self.write_config(&self.config).await?;
+        if let Some(config_data) = &mut self.config_data {
+            config_data
+                .add_subscription(subscription, &self.config)
+                .await?;
+        }
+        Ok(())
     }
 
-    pub async fn remove_subscription(&mut self, subscription: String) -> Result<(), ConfigError> {
+    pub async fn remove_subscription(&mut self, subscription: &str) -> Result<(), ConfigError> {
         let index = self
             .config
             .subscriptions
@@ -62,7 +146,11 @@ impl ConfigHandler {
             .position(|item| *item == subscription)
             .ok_or(ConfigError::SubscriptionDoesNotExist)?;
         self.config.subscriptions.remove(index);
-        self.write_config(&self.config).await
+        self.write_config(&self.config).await?;
+        if let Some(config_data) = &mut self.config_data {
+            config_data.remove_subscription(subscription);
+        }
+        Ok(())
     }
 
     async fn read_config(path: &PathBuf) -> Result<Config, ConfigError> {

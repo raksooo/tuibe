@@ -4,6 +4,8 @@ use crate::{
         component::{Component, EventSender, Frame, UpdateEvent},
         dialog,
         feed::Feed,
+        loading_indicator::LoadingIndicator,
+        subscriptions::Subscriptions,
     },
 };
 use crossterm::event::{Event, KeyCode};
@@ -12,52 +14,58 @@ use tui::layout::Rect;
 
 pub struct App {
     show_subscriptions: Arc<Mutex<bool>>,
-    config_handler: Arc<Mutex<Result<Option<ConfigHandler>, ()>>>,
+    error: Arc<Mutex<bool>>,
+    config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
     tx: EventSender,
-    feed: Arc<Mutex<Feed>>,
+    feed: Arc<Mutex<Box<dyn Component + Send>>>,
+    subscriptions: Arc<Mutex<Subscriptions>>,
 }
 
 impl App {
     pub fn new(tx: EventSender) -> Self {
-        let config_handler = Arc::new(Mutex::new(Ok(None)));
-        let feed = Arc::new(Mutex::new(Feed::new(tx.clone(), None)));
-
-        let mut new_app = Self {
+        let mut app = Self {
             show_subscriptions: Arc::new(Mutex::new(false)),
-            config_handler,
-            tx,
-            feed,
+            error: Arc::new(Mutex::new(false)),
+            config_handler: Arc::new(Mutex::new(None)),
+
+            tx: tx.clone(),
+            feed: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(tx.clone())))),
+            subscriptions: Arc::new(Mutex::new(Subscriptions::new(tx.clone()))),
         };
 
-        new_app.reload();
-        new_app
+        app.init();
+        app
     }
 
-    fn reload(&mut self) {
+    fn init(&mut self) {
         let tx = self.tx.clone();
+        let error = Arc::clone(&self.error);
         let config_handler = Arc::clone(&self.config_handler);
         let feed = Arc::clone(&self.feed);
 
         tokio::spawn(async move {
-            {
-                let mut config_handler = config_handler.lock().unwrap();
-                *config_handler = Ok(None);
-            }
+            if let Ok(mut new_config_handler) = ConfigHandler::load().await {
+                if let Ok(()) = new_config_handler.fetch().await {
+                    if let Some(config_data) = &new_config_handler.config_data {
+                        let mut feed = feed.lock().unwrap();
+                        *feed = Box::new(Feed::new(
+                            tx.clone(),
+                            config_data.videos.clone().into_iter().collect(),
+                        ));
+                    }
+                } else {
+                    let mut error = error.lock().unwrap();
+                    *error = true;
+                }
 
-            if let Ok(new_config_handler) = ConfigHandler::load().await {
-                let new_config = new_config_handler.config.clone();
                 {
                     let mut config_handler = config_handler.lock().unwrap();
-                    *config_handler = Ok(Some(new_config_handler));
-                }
-                {
-                    let mut feed = feed.lock().unwrap();
-                    feed.update_with_config(&new_config);
+                    *config_handler = Some(new_config_handler);
                 }
             } else {
-                let mut config_handler = config_handler.lock().unwrap();
-                *config_handler = Err(());
+                let mut error = error.lock().unwrap();
+                *error = true;
             }
 
             let _ = tx.send(UpdateEvent::Redraw).await;
@@ -87,11 +95,11 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        if let Ok(_) = *self.config_handler.lock().unwrap() {
+        if *self.error.lock().unwrap() {
+            dialog::dialog(f, size, "Something went wrong..");
+        } else {
             let mut feed = self.feed.lock().unwrap();
             feed.draw(f, size);
-        } else {
-            dialog::dialog(f, size, "Something went wrong..");
         }
     }
 

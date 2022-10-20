@@ -1,11 +1,6 @@
 use crate::{
-    config::Config,
-    feed::{Feed as VideoFeed, Video},
-    interface::{
-        component::{Component, EventSender, Frame, UpdateEvent},
-        dialog,
-        loading_indicator::LoadingIndicator,
-    },
+    interface::component::{Component, EventSender, Frame, UpdateEvent},
+    video::Video,
 };
 use crossterm::event::{Event, KeyCode};
 use std::sync::{Arc, Mutex};
@@ -16,66 +11,19 @@ use tui::{
 };
 
 pub struct Feed {
-    config: Option<Config>,
-    videos: Arc<Mutex<Result<Option<Vec<Video>>, ()>>>,
+    videos: Arc<Mutex<Vec<Video>>>,
     current_item: Arc<Mutex<usize>>,
 
     tx: EventSender,
-    loading_indicator: LoadingIndicator,
 }
 
 impl Feed {
-    pub fn new(tx: EventSender, config: Option<Config>) -> Self {
-        let videos = Arc::new(Mutex::new(Ok(None)));
-        let current_item = Arc::new(Mutex::new(0));
-        let loading_indicator = LoadingIndicator::new(tx.clone());
-
-        let mut new_feed = Self {
-            config,
-            videos,
-            current_item,
+    pub fn new(tx: EventSender, mut videos: Vec<Video>) -> Self {
+        videos.reverse();
+        Self {
+            videos: Arc::new(Mutex::new(videos)),
+            current_item: Arc::new(Mutex::new(0)),
             tx,
-            loading_indicator,
-        };
-
-        new_feed.reload();
-        new_feed
-    }
-
-    pub fn update_with_config(&mut self, config: &Config) {
-        self.config = Some(config.to_owned());
-        self.reload();
-    }
-
-    fn reload(&mut self) {
-        let tx = self.tx.clone();
-        let videos = Arc::clone(&self.videos);
-        let current_item = Arc::clone(&self.current_item);
-
-        if let Some(config) = &self.config {
-            let config = config.clone();
-
-            tokio::spawn(async move {
-                {
-                    let mut videos = videos.lock().unwrap();
-                    *videos = Ok(None);
-                    let mut current_item = current_item.lock().unwrap();
-                    *current_item = 0;
-                }
-
-                let _ = tx.send(UpdateEvent::Redraw).await;
-
-                {
-                    let new_videos = VideoFeed::from_config(&config).await;
-                    let mut videos = videos.lock().unwrap();
-                    match new_videos {
-                        Ok(feed) if feed.videos.len() > 0 => *videos = Ok(Some(feed.videos)),
-                        _ => *videos = Err(()),
-                    }
-                }
-
-                let _ = tx.send(UpdateEvent::Redraw).await;
-            });
         }
     }
 
@@ -87,10 +35,9 @@ impl Feed {
         tokio::spawn(async move {
             {
                 let current_item = current_item.lock().unwrap();
-                if let Ok(Some(ref mut videos)) = *videos.lock().unwrap() {
-                    if let Some(video) = videos.get_mut(*current_item) {
-                        video.toggle_selected();
-                    }
+                let mut videos = videos.lock().unwrap();
+                if let Some(video) = videos.get_mut(*current_item) {
+                    video.toggle_selected();
                 }
             }
 
@@ -121,10 +68,9 @@ impl Feed {
 
         tokio::spawn(async move {
             {
-                if let Ok(Some(ref videos)) = *videos.lock().unwrap() {
-                    let mut current_item = current_item.lock().unwrap();
-                    *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
-                }
+                let videos = videos.lock().unwrap();
+                let mut current_item = current_item.lock().unwrap();
+                *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
             }
 
             let _ = tx.send(UpdateEvent::Redraw).await;
@@ -160,25 +106,19 @@ impl Feed {
 
 impl Component for Feed {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        if let Ok(ref videos) = *self.videos.lock().unwrap() {
-            if let Some(videos) = videos {
-                let description_height = 10;
-                let description_y = size.height - description_height;
-                let list_size = Rect::new(0, 0, size.width, description_y - 10);
-                let description_size = Rect::new(0, description_y, size.width, description_height);
+        let videos = self.videos.lock().unwrap();
 
-                let current_item = *self.current_item.lock().unwrap();
-                let list = Self::create_list(&videos, current_item, list_size.width.into());
-                let description = Self::create_description(&videos, current_item);
+        let description_height = 10;
+        let description_y = size.height - description_height;
+        let list_size = Rect::new(0, 0, size.width, description_y - 10);
+        let description_size = Rect::new(0, description_y, size.width, description_height);
 
-                f.render_widget(list, list_size);
-                f.render_widget(description, description_size);
-            } else {
-                self.loading_indicator.draw(f, size);
-            }
-        } else {
-            dialog::dialog(f, size, "Something went wrong..");
-        }
+        let current_item = *self.current_item.lock().unwrap();
+        let list = Self::create_list(&videos, current_item, list_size.width.into());
+        let description = Self::create_description(&videos, current_item);
+
+        f.render_widget(list, list_size);
+        f.render_widget(description, description_size);
     }
 
     fn handle_event(&mut self, event: Event) {
@@ -189,7 +129,6 @@ impl Component for Feed {
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
-                KeyCode::Char('r') => self.reload(),
                 _ => (),
             }
         }

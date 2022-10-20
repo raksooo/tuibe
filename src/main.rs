@@ -1,7 +1,7 @@
 mod config;
 mod error;
-mod feed;
 mod interface;
+mod video;
 
 use interface::{app::App, ui};
 

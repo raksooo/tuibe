@@ -5,3 +5,4 @@ pub mod app;
 pub mod dialog;
 pub mod feed;
 pub mod loading_indicator;
+pub mod subscriptions;

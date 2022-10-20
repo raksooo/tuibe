@@ -1,7 +1,9 @@
-use crate::{config::Config, error::FeedError};
+use crate::error::FeedError;
 use atom_syndication::Entry;
 use chrono::{DateTime, FixedOffset};
+use std::cmp::Ordering;
 
+#[derive(Clone, Eq, PartialEq)]
 pub struct Video {
     pub title: String,
     pub url: String,
@@ -71,45 +73,14 @@ impl Video {
     }
 }
 
-pub struct Feed {
-    pub videos: Vec<Video>,
+impl Ord for Video {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.date.cmp(&other.date)
+    }
 }
 
-impl Feed {
-    pub async fn from_config(config: &Config) -> Result<Feed, FeedError> {
-        let mut videos: Vec<Video> = Vec::new();
-        for channel_url in config.subscriptions.iter() {
-            let channel_videos = Self::fetch_videos(channel_url).await?;
-            for mut video in channel_videos {
-                video.select_if_newer(config.last_played_timestamp);
-                videos.push(video);
-            }
-        }
-
-        videos.sort_by(|a, b| b.date.partial_cmp(&a.date).unwrap());
-
-        Ok(Feed { videos })
-    }
-
-    async fn fetch_videos(url: &String) -> Result<Vec<Video>, FeedError> {
-        let feed = Self::fetch_rss(url).await?;
-        let author = feed.title().as_str();
-
-        feed.entries()
-            .iter()
-            .map(|entry| Video::from_rss_entry(entry, author))
-            .collect()
-    }
-
-    async fn fetch_rss(url: &String) -> Result<atom_syndication::Feed, FeedError> {
-        let content = reqwest::get(url)
-            .await
-            .map_err(|_| FeedError::FetchFeed)?
-            .bytes()
-            .await
-            .map_err(|_| FeedError::FetchFeed)?;
-
-        atom_syndication::Feed::read_from(&content[..])
-            .map_err(|error| FeedError::ReadFeed { error })
+impl PartialOrd for Video {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
