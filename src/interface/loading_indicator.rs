@@ -31,7 +31,11 @@ impl LoadingIndicator {
             let _ = tx.send(UpdateEvent::Redraw).await;
         });
 
-        Self { dots, dialog, handle }
+        Self {
+            dots,
+            dialog,
+            handle,
+        }
     }
 
     fn before_draw(&mut self) {

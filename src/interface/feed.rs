@@ -110,8 +110,8 @@ impl Component for Feed {
 
         let description_height = 10;
         let description_y = size.height - description_height;
-        let list_size = Rect::new(0, 0, size.width, description_y - 10);
-        let description_size = Rect::new(0, description_y, size.width, description_height);
+        let list_size = Rect::new(size.x, 0, size.width, description_y - 10);
+        let description_size = Rect::new(size.x, description_y, size.width, description_height);
 
         let current_item = *self.current_item.lock().unwrap();
         let list = Self::create_list(&videos, current_item, list_size.width.into());

@@ -13,23 +13,21 @@ use std::sync::{Arc, Mutex};
 use tui::layout::Rect;
 
 pub struct App {
-    show_subscriptions: Arc<Mutex<bool>>,
     config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
     tx: EventSender,
     feed: Arc<Mutex<Box<dyn Component + Send>>>,
-    subscriptions: Arc<Mutex<Subscriptions>>,
+    subscriptions: Arc<Mutex<Option<Subscriptions>>>,
 }
 
 impl App {
     pub fn new(tx: EventSender) -> Self {
         let mut app = Self {
-            show_subscriptions: Arc::new(Mutex::new(false)),
             config_handler: Arc::new(Mutex::new(None)),
 
             tx: tx.clone(),
             feed: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(tx.clone())))),
-            subscriptions: Arc::new(Mutex::new(Subscriptions::new(tx.clone()))),
+            subscriptions: Arc::new(Mutex::new(None)),
         };
 
         app.init();
@@ -79,14 +77,25 @@ impl App {
         });
     }
 
-    fn toggle_show_subscriptions(&self) {
-        let show_subscriptions = Arc::clone(&self.show_subscriptions);
+    fn toggle_subscriptions(&self) {
+        let config_handler = Arc::clone(&self.config_handler);
+        let subscriptions = Arc::clone(&self.subscriptions);
         let tx = self.tx.clone();
 
         tokio::spawn(async move {
             {
-                let mut show_subscriptions = show_subscriptions.lock().unwrap();
-                *show_subscriptions = !*show_subscriptions;
+                let config_handler = config_handler.lock().unwrap();
+                let mut subscriptions = subscriptions.lock().unwrap();
+                if subscriptions.is_some() {
+                    *subscriptions = None;
+                } else {
+                    if let Some(ref config_handler) = *config_handler {
+                        if let Some(config_data) = &config_handler.config_data {
+                            *subscriptions =
+                                Some(Subscriptions::new(tx.clone(), config_data.channels.clone()));
+                        }
+                    }
+                }
             }
             let _ = tx.send(UpdateEvent::Redraw).await;
         });
@@ -95,20 +104,35 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        let mut feed = self.feed.lock().unwrap();
-        feed.draw(f, size);
+        let mut subscriptions = self.subscriptions.lock().unwrap();
+        let subscriptions_width = if subscriptions.is_some() { size.width / 2 } else { 0 };
+        {
+            let feed_size = Rect::new(subscriptions_width, 0, size.width - subscriptions_width, size.height);
+            let mut feed = self.feed.lock().unwrap();
+            feed.draw(f, feed_size);
+        }
+
+        if let Some(ref mut subscriptions) = *subscriptions {
+            let size = Rect::new(0, 0, subscriptions_width, size.height);
+            subscriptions.draw(f, size);
+        }
     }
 
     fn handle_event(&mut self, event: Event) {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char('q') => return self.quit(),
-                KeyCode::Char('s') => return self.toggle_show_subscriptions(),
+                KeyCode::Char('s') => return self.toggle_subscriptions(),
                 _ => (),
             }
         }
 
-        let mut feed = self.feed.lock().unwrap();
-        feed.handle_event(event);
+        let mut subscriptions = self.subscriptions.lock().unwrap();
+        if let Some(ref mut subscriptions) = *subscriptions {
+            subscriptions.handle_event(event);
+        } else {
+            let mut feed = self.feed.lock().unwrap();
+            feed.handle_event(event);
+        }
     }
 }
