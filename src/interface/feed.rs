@@ -3,7 +3,6 @@ use crate::{
     video::Video,
 };
 use crossterm::event::{Event, KeyCode};
-use std::sync::{Arc, Mutex};
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -11,78 +10,44 @@ use tui::{
 };
 
 pub struct Feed {
-    videos: Arc<Mutex<Vec<Video>>>,
-    current_item: Arc<Mutex<usize>>,
-
-    tx: EventSender,
+    videos: Vec<Video>,
+    current_item: usize,
 }
 
 impl Feed {
-    pub fn new(tx: EventSender, mut videos: Vec<Video>) -> Self {
+    pub fn new(_tx: EventSender, mut videos: Vec<Video>) -> Self {
         videos.reverse();
         Self {
-            videos: Arc::new(Mutex::new(videos)),
-            current_item: Arc::new(Mutex::new(0)),
-            tx,
+            videos,
+            current_item: 0,
         }
     }
 
-    fn toggle_current_item(&self) {
-        let tx = self.tx.clone();
-        let videos = Arc::clone(&self.videos);
-        let current_item = Arc::clone(&self.current_item);
-
-        tokio::spawn(async move {
-            {
-                let current_item = current_item.lock().unwrap();
-                let mut videos = videos.lock().unwrap();
-                if let Some(video) = videos.get_mut(*current_item) {
-                    video.toggle_selected();
-                }
-            }
-
-            let _ = tx.send(UpdateEvent::Redraw).await;
-        });
+    fn toggle_current_item(&mut self) -> UpdateEvent {
+        if let Some(video) = self.videos.get_mut(self.current_item) {
+            video.toggle_selected();
+        }
+        UpdateEvent::Redraw
     }
 
-    fn move_up(&mut self) {
-        let tx = self.tx.clone();
-        let current_item = Arc::clone(&self.current_item);
-
-        tokio::spawn(async move {
-            {
-                let mut current_item = current_item.lock().unwrap();
-                if *current_item > 0 {
-                    *current_item = *current_item - 1;
-                }
-            }
-
-            let _ = tx.send(UpdateEvent::Redraw).await;
-        });
+    fn move_up(&mut self) -> UpdateEvent {
+        if self.current_item > 0 {
+            self.current_item = self.current_item - 1;
+        }
+        UpdateEvent::Redraw
     }
 
-    fn move_down(&mut self) {
-        let tx = self.tx.clone();
-        let videos = Arc::clone(&self.videos);
-        let current_item = Arc::clone(&self.current_item);
-
-        tokio::spawn(async move {
-            {
-                let videos = videos.lock().unwrap();
-                let mut current_item = current_item.lock().unwrap();
-                *current_item = std::cmp::min(*current_item + 1, videos.len() - 1);
-            }
-
-            let _ = tx.send(UpdateEvent::Redraw).await;
-        });
+    fn move_down(&mut self) -> UpdateEvent {
+        self.current_item = std::cmp::min(self.current_item + 1, self.videos.len() - 1);
+        UpdateEvent::Redraw
     }
 
-    fn create_list(videos: &Vec<Video>, current_item: usize, width: usize) -> List<'_> {
+    fn create_list(&self, width: usize) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
 
-        for (i, video) in videos.iter().enumerate() {
+        for (i, video) in self.videos.iter().enumerate() {
             let mut item = ListItem::new(video.get_label(width));
-            if i == current_item {
+            if i == self.current_item {
                 item = item.style(Style::default().fg(Color::Green));
             }
             items.push(item);
@@ -93,9 +58,14 @@ impl Feed {
             .style(Style::default().fg(Color::White))
     }
 
-    fn create_description(videos: &Vec<Video>, current_item: usize) -> Paragraph<'_> {
+    fn create_description(&self) -> Paragraph<'_> {
         // current_item is always within the bounds of videos
-        let description = videos.get(current_item).unwrap().description.to_owned();
+        let description = self
+            .videos
+            .get(self.current_item)
+            .unwrap()
+            .description
+            .to_owned();
 
         Paragraph::new(description)
             .block(Block::default().title("Description").borders(Borders::ALL))
@@ -106,22 +76,19 @@ impl Feed {
 
 impl Component for Feed {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        let videos = self.videos.lock().unwrap();
-
         let description_height = 10;
         let description_y = size.height - description_height;
         let list_size = Rect::new(size.x, 0, size.width, description_y - 10);
         let description_size = Rect::new(size.x, description_y, size.width, description_height);
 
-        let current_item = *self.current_item.lock().unwrap();
-        let list = Self::create_list(&videos, current_item, list_size.width.into());
-        let description = Self::create_description(&videos, current_item);
+        let list = self.create_list(list_size.width.into());
+        let description = self.create_description();
 
         f.render_widget(list, list_size);
         f.render_widget(description, description_size);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event) -> UpdateEvent {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char(' ') => self.toggle_current_item(),
@@ -129,8 +96,10 @@ impl Component for Feed {
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
-                _ => (),
+                _ => UpdateEvent::None,
             }
+        } else {
+            UpdateEvent::None
         }
     }
 }

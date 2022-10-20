@@ -10,7 +10,7 @@ use crate::{
 };
 use crossterm::event::{Event, KeyCode};
 use std::sync::{Arc, Mutex};
-use tui::layout::Rect;
+use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub struct App {
     config_handler: Arc<Mutex<Option<ConfigHandler>>>,
@@ -70,58 +70,54 @@ impl App {
         });
     }
 
-    fn quit(&self) {
-        let tx = self.tx.clone();
-        tokio::spawn(async move {
-            let _ = tx.send(UpdateEvent::Quit).await;
-        });
-    }
-
-    fn toggle_subscriptions(&self) {
-        let config_handler = Arc::clone(&self.config_handler);
-        let subscriptions = Arc::clone(&self.subscriptions);
-        let tx = self.tx.clone();
-
-        tokio::spawn(async move {
-            {
-                let config_handler = config_handler.lock().unwrap();
-                let mut subscriptions = subscriptions.lock().unwrap();
-                if subscriptions.is_some() {
-                    *subscriptions = None;
-                } else {
-                    if let Some(ref config_handler) = *config_handler {
-                        if let Some(config_data) = &config_handler.config_data {
-                            *subscriptions =
-                                Some(Subscriptions::new(tx.clone(), config_data.channels.clone()));
-                        }
-                    }
+    fn toggle_subscriptions(&self) -> UpdateEvent {
+        let config_handler = self.config_handler.lock().unwrap();
+        let mut subscriptions = self.subscriptions.lock().unwrap();
+        if subscriptions.is_some() {
+            *subscriptions = None;
+        } else {
+            if let Some(ref config_handler) = *config_handler {
+                if let Some(config_data) = &config_handler.config_data {
+                    *subscriptions = Some(Subscriptions::new(
+                        self.tx.clone(),
+                        config_data.channels.clone(),
+                    ));
                 }
             }
-            let _ = tx.send(UpdateEvent::Redraw).await;
-        });
+        }
+
+        UpdateEvent::Redraw
     }
 }
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
         let mut subscriptions = self.subscriptions.lock().unwrap();
-        let subscriptions_width = if subscriptions.is_some() { size.width / 2 } else { 0 };
-        {
-            let feed_size = Rect::new(subscriptions_width, 0, size.width - subscriptions_width, size.height);
-            let mut feed = self.feed.lock().unwrap();
-            feed.draw(f, feed_size);
-        }
+        let subscriptions_numerator = subscriptions.as_ref().map_or(0, |_| 1);
+
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Ratio(subscriptions_numerator, 2),
+                    Constraint::Ratio(2 - subscriptions_numerator, 2),
+                ]
+                .as_ref(),
+            )
+            .split(size);
 
         if let Some(ref mut subscriptions) = *subscriptions {
-            let size = Rect::new(0, 0, subscriptions_width, size.height);
-            subscriptions.draw(f, size);
+            subscriptions.draw(f, chunks[0]);
         }
+
+        let mut feed = self.feed.lock().unwrap();
+        feed.draw(f, chunks[1]);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event) -> UpdateEvent {
         if let Event::Key(event) = event {
             match event.code {
-                KeyCode::Char('q') => return self.quit(),
+                KeyCode::Char('q') => return UpdateEvent::Quit,
                 KeyCode::Char('s') => return self.toggle_subscriptions(),
                 _ => (),
             }
@@ -129,10 +125,10 @@ impl Component for App {
 
         let mut subscriptions = self.subscriptions.lock().unwrap();
         if let Some(ref mut subscriptions) = *subscriptions {
-            subscriptions.handle_event(event);
+            subscriptions.handle_event(event)
         } else {
             let mut feed = self.feed.lock().unwrap();
-            feed.handle_event(event);
+            feed.handle_event(event)
         }
     }
 }

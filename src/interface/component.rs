@@ -5,7 +5,7 @@ use tui::{backend::CrosstermBackend, layout::Rect, Frame as TuiFrame};
 pub type Backend = CrosstermBackend<std::io::Stdout>;
 pub type Frame<'a> = TuiFrame<'a, Backend>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum UpdateEvent {
     None,
     Redraw,
@@ -22,5 +22,8 @@ pub type EventSender = mpsc::Sender<UpdateEvent>;
 
 pub trait Component {
     fn draw(&mut self, f: &mut Frame, size: Rect);
-    fn handle_event(&mut self, _event: Event) {}
+
+    fn handle_event(&mut self, _event: Event) -> UpdateEvent {
+        UpdateEvent::None
+    }
 }

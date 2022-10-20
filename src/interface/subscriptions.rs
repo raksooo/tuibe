@@ -16,28 +16,37 @@ pub struct Subscriptions {
 impl Subscriptions {
     pub fn new(tx: EventSender, channels: HashMap<String, String>) -> Self {
         // TODO: Handle empty map
-        Subscriptions { tx, channels, selected: 0 }
+        Subscriptions {
+            tx,
+            channels,
+            selected: 0,
+        }
     }
 
     pub fn update_channels(&mut self, channels: HashMap<String, String>) {
         self.channels = channels;
-        self.redraw();
+
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            let _ = tx.send(UpdateEvent::Redraw).await;
+        });
     }
 
-    fn move_up(&mut self) {
+    fn move_up(&mut self) -> UpdateEvent {
         if self.selected > 0 {
             self.selected = self.selected - 1;
         }
-        self.redraw();
+        UpdateEvent::Redraw
     }
 
-    fn move_down(&mut self) {
+    fn move_down(&mut self) -> UpdateEvent {
         self.selected = std::cmp::min(self.selected + 1, self.channels.len() - 1);
-        self.redraw();
+        UpdateEvent::Redraw
     }
 
-    fn delete_selected(&mut self) {
+    fn delete_selected(&mut self) -> UpdateEvent {
         // TODO
+        UpdateEvent::None
     }
 
     fn create_list(&self) -> List<'_> {
@@ -55,13 +64,6 @@ impl Subscriptions {
             .block(Block::default().title("Channels").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
     }
-
-    fn redraw(&self) {
-        let tx = self.tx.clone();
-        tokio::spawn(async move {
-            let _ = tx.send(UpdateEvent::Redraw).await;
-        });
-    }
 }
 
 impl Component for Subscriptions {
@@ -70,7 +72,7 @@ impl Component for Subscriptions {
         f.render_widget(list, size);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event) -> UpdateEvent {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char('d') => self.delete_selected(),
@@ -78,8 +80,10 @@ impl Component for Subscriptions {
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
-                _ => (),
+                _ => UpdateEvent::None,
             }
+        } else {
+            UpdateEvent::None
         }
     }
 }

@@ -21,7 +21,7 @@ where
         .expect("Failed to send update event");
     loop {
         select! {
-            event = event_reader.next() => handle_input_event(&mut root, event),
+            event = event_reader.next() => handle_input_event(&mut root, tx.clone(), event),
             event = rx.recv() => {
                 if let Some(event) = event {
                     match event {
@@ -37,9 +37,16 @@ where
     }
 }
 
-fn handle_input_event(root: &mut impl Component, event: Option<Result<Event, io::Error>>) {
+fn handle_input_event(
+    root: &mut impl Component,
+    tx: EventSender,
+    event: Option<Result<Event, io::Error>>,
+) {
     if let Some(Ok(event)) = event {
-        root.handle_event(event);
+        let event = root.handle_event(event);
+        tokio::spawn(async move {
+            let _ = tx.send(event).await;
+        });
     }
 }
 
