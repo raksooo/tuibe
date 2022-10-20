@@ -2,7 +2,7 @@ use crate::{
     config::ConfigHandler,
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
-        dialog,
+        dialog::Dialog,
         feed::Feed,
         loading_indicator::LoadingIndicator,
         subscriptions::Subscriptions,
@@ -14,7 +14,6 @@ use tui::layout::Rect;
 
 pub struct App {
     show_subscriptions: Arc<Mutex<bool>>,
-    error: Arc<Mutex<bool>>,
     config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
     tx: EventSender,
@@ -26,7 +25,6 @@ impl App {
     pub fn new(tx: EventSender) -> Self {
         let mut app = Self {
             show_subscriptions: Arc::new(Mutex::new(false)),
-            error: Arc::new(Mutex::new(false)),
             config_handler: Arc::new(Mutex::new(None)),
 
             tx: tx.clone(),
@@ -40,7 +38,6 @@ impl App {
 
     fn init(&mut self) {
         let tx = self.tx.clone();
-        let error = Arc::clone(&self.error);
         let config_handler = Arc::clone(&self.config_handler);
         let feed = Arc::clone(&self.feed);
 
@@ -53,10 +50,13 @@ impl App {
                             tx.clone(),
                             config_data.videos.clone().into_iter().collect(),
                         ));
+                    } else {
+                        let mut feed = feed.lock().unwrap();
+                        *feed = Box::new(Dialog::new("Something went wrong.."));
                     }
                 } else {
-                    let mut error = error.lock().unwrap();
-                    *error = true;
+                    let mut feed = feed.lock().unwrap();
+                    *feed = Box::new(Dialog::new("Something went wrong.."));
                 }
 
                 {
@@ -64,8 +64,8 @@ impl App {
                     *config_handler = Some(new_config_handler);
                 }
             } else {
-                let mut error = error.lock().unwrap();
-                *error = true;
+                let mut feed = feed.lock().unwrap();
+                *feed = Box::new(Dialog::new("Something went wrong.."));
             }
 
             let _ = tx.send(UpdateEvent::Redraw).await;
@@ -95,12 +95,8 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        if *self.error.lock().unwrap() {
-            dialog::dialog(f, size, "Something went wrong..");
-        } else {
-            let mut feed = self.feed.lock().unwrap();
-            feed.draw(f, size);
-        }
+        let mut feed = self.feed.lock().unwrap();
+        feed.draw(f, size);
     }
 
     fn handle_event(&mut self, event: Event) {
