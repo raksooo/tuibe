@@ -9,36 +9,58 @@ use crate::{
     },
 };
 use crossterm::event::{Event, KeyCode};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use tui::layout::{Constraint, Direction, Layout, Rect};
+
+pub enum AppMsg {
+    RemoveSubscription(String),
+}
 
 pub struct App {
     config_handler: Arc<Mutex<Option<ConfigHandler>>>,
 
     tx: EventSender,
+    app_tx: mpsc::Sender<AppMsg>,
     feed: Arc<Mutex<Box<dyn Component + Send>>>,
     subscriptions: Arc<Mutex<Option<Subscriptions>>>,
 }
 
 impl App {
     pub fn new(tx: EventSender) -> Self {
+        let (app_tx, mut app_rx) = mpsc::channel();
+
         let mut app = Self {
             config_handler: Arc::new(Mutex::new(None)),
 
             tx: tx.clone(),
+            app_tx: app_tx.clone(),
             feed: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(tx.clone())))),
             subscriptions: Arc::new(Mutex::new(None)),
         };
 
-        app.init();
+        app.init(app_tx, app_rx);
         app
     }
 
-    fn init(&mut self) {
+    fn init(&mut self, app_tx: mpsc::Sender<AppMsg>, app_rx: mpsc::Receiver<AppMsg>) {
         let tx = self.tx.clone();
         let config_handler = Arc::clone(&self.config_handler);
-        let feed = Arc::clone(&self.feed);
+        tokio::spawn(async move {
+            loop {
+                let event = app_rx.recv().unwrap();
+                match event {
+                    AppMsg::RemoveSubscription(subscription) => {
+                        // let config_handler = config_handler.lock().unwrap();
+                        // config_handler.remove_subscription(subscription).await;
+                        // let _ = tx.send(UpdateEvent::Redraw).await;
+                    }
+                }
+            }
+        });
 
+        let tx = self.tx.clone();
+        let feed = Arc::clone(&self.feed);
+        let config_handler = Arc::clone(&self.config_handler);
         tokio::spawn(async move {
             if let Ok(mut new_config_handler) = ConfigHandler::load().await {
                 if let Ok(()) = new_config_handler.fetch().await {
@@ -80,6 +102,7 @@ impl App {
                 if let Some(config_data) = &config_handler.config_data {
                     *subscriptions = Some(Subscriptions::new(
                         self.tx.clone(),
+                        self.app_tx.clone(),
                         config_data.channels.clone(),
                     ));
                 }

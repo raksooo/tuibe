@@ -1,6 +1,9 @@
-use crate::interface::component::{Component, EventSender, Frame, UpdateEvent};
+use crate::interface::{
+    app::AppMsg,
+    component::{Component, EventSender, Frame, UpdateEvent},
+};
 use crossterm::event::{Event, KeyCode};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::mpsc};
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -9,15 +12,21 @@ use tui::{
 
 pub struct Subscriptions {
     tx: EventSender,
+    app_tx: mpsc::Sender<AppMsg>,
     channels: HashMap<String, String>,
     selected: usize,
 }
 
 impl Subscriptions {
-    pub fn new(tx: EventSender, channels: HashMap<String, String>) -> Self {
+    pub fn new(
+        tx: EventSender,
+        app_tx: mpsc::Sender<AppMsg>,
+        channels: HashMap<String, String>,
+    ) -> Self {
         // TODO: Handle empty map
         Subscriptions {
             tx,
+            app_tx,
             channels,
             selected: 0,
         }
@@ -44,8 +53,11 @@ impl Subscriptions {
         UpdateEvent::Redraw
     }
 
-    fn delete_selected(&mut self) -> UpdateEvent {
-        // TODO
+    fn remove_selected(&mut self) -> UpdateEvent {
+        let subscription = self.channels.keys().nth(self.selected).unwrap();
+        self.app_tx
+            .send(AppMsg::RemoveSubscription(subscription.to_string()))
+            .unwrap();
         UpdateEvent::None
     }
 
@@ -75,7 +87,7 @@ impl Component for Subscriptions {
     fn handle_event(&mut self, event: Event) -> UpdateEvent {
         if let Event::Key(event) = event {
             match event.code {
-                KeyCode::Char('d') => self.delete_selected(),
+                KeyCode::Char('d') => self.remove_selected(),
                 KeyCode::Up => self.move_up(),
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
