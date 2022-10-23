@@ -8,8 +8,11 @@ pub enum ConfigError {
     #[error(display = "Failed to read config file")]
     ReadConfigFile,
 
-    #[error(display = "Failed to parse config file")]
-    ParseConfigFile,
+    #[error(display = "Failed to parse config file: {:?}", error)]
+    ParseConfigFile {
+        #[error(from)]
+        error: toml::de::Error,
+    },
 
     #[error(display = "Failed to create config directory")]
     CreateConfigDir,
@@ -43,8 +46,4 @@ pub enum FeedError {
 
     #[error(display = "Failed to parse video")]
     ParseVideo,
-
-    // TODO: Replace with ParseVideo when working
-    #[error(display = "Failed to parse video description")]
-    ParseVideoDescription,
 }

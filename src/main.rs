@@ -1,9 +1,13 @@
+mod common_config;
 mod config;
+mod config_file_handler;
+mod rss_config;
+
 mod error;
 mod interface;
 mod video;
 
-use interface::{app::App, ui};
+use interface::{config_provider::ConfigProvider, ui};
 
 use crossterm::{
     execute,
@@ -20,7 +24,7 @@ async fn main() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::create(&mut terminal, |tx| App::new(tx)).await;
+    ui::create(&mut terminal, |tx| ConfigProvider::new(tx)).await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");

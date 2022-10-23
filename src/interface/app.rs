@@ -1,10 +1,10 @@
 use crate::{
-    config::ConfigHandler,
+    common_config::CommonConfigHandler,
+    config::{Config, ConfigData},
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
         dialog::Dialog,
         feed::Feed,
-        loading_indicator::LoadingIndicator,
         subscriptions::Subscriptions,
     },
 };
@@ -17,7 +17,8 @@ pub enum AppMsg {
 }
 
 pub struct App {
-    config_handler: Arc<Mutex<Option<ConfigHandler>>>,
+    common_config: Arc<CommonConfigHandler>,
+    config: Arc<Box<dyn Config + Send + Sync>>,
 
     tx: EventSender,
     app_tx: mpsc::Sender<AppMsg>,
@@ -26,90 +27,104 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(tx: EventSender) -> Self {
-        let (app_tx, mut app_rx) = mpsc::channel();
+    pub fn new<C>(tx: EventSender, common_config: CommonConfigHandler, config: C) -> Self
+    where
+        C: Config + Send + Sync + 'static,
+    {
+        let (app_tx, app_rx) = mpsc::channel();
 
+        let feed = Self::create_feed(&common_config, &config.data());
         let mut app = Self {
-            config_handler: Arc::new(Mutex::new(None)),
+            common_config: Arc::new(common_config),
+            config: Arc::new(Box::new(config)),
 
             tx: tx.clone(),
             app_tx: app_tx.clone(),
-            feed: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(tx.clone())))),
+            feed: Arc::new(Mutex::new(Box::new(feed))),
             subscriptions: Arc::new(Mutex::new(None)),
         };
 
-        app.init(app_tx, app_rx);
+        app.init_channel(app_rx);
         app
     }
 
-    fn init(&mut self, app_tx: mpsc::Sender<AppMsg>, app_rx: mpsc::Receiver<AppMsg>) {
+    fn init_channel(&mut self, app_rx: mpsc::Receiver<AppMsg>) {
         let tx = self.tx.clone();
-        let config_handler = Arc::clone(&self.config_handler);
-        tokio::spawn(async move {
-            loop {
-                let event = app_rx.recv().unwrap();
-                match event {
-                    AppMsg::RemoveSubscription(subscription) => {
-                        // let config_handler = config_handler.lock().unwrap();
-                        // config_handler.remove_subscription(subscription).await;
-                        // let _ = tx.send(UpdateEvent::Redraw).await;
-                    }
-                }
-            }
-        });
-
-        let tx = self.tx.clone();
+        let common_config = Arc::clone(&self.common_config);
+        let config = Arc::clone(&self.config);
         let feed = Arc::clone(&self.feed);
-        let config_handler = Arc::clone(&self.config_handler);
+        let subscriptions = Arc::clone(&self.subscriptions);
+
         tokio::spawn(async move {
-            if let Ok(mut new_config_handler) = ConfigHandler::load().await {
-                if let Ok(()) = new_config_handler.fetch().await {
-                    if let Some(config_data) = &new_config_handler.config_data {
-                        let mut feed = feed.lock().unwrap();
-                        *feed = Box::new(Feed::new(
-                            tx.clone(),
-                            config_data.videos.clone().into_iter().collect(),
-                        ));
-                    } else {
-                        let mut feed = feed.lock().unwrap();
-                        *feed = Box::new(Dialog::new("Something went wrong.."));
-                    }
-                } else {
-                    let mut feed = feed.lock().unwrap();
-                    *feed = Box::new(Dialog::new("Something went wrong.."));
-                }
+            let _ = Self::listen_app_msg(
+                app_rx,
+                tx,
+                Arc::clone(&common_config),
+                Arc::clone(&config),
+                Arc::clone(&feed),
+                Arc::clone(&subscriptions),
+            )
+            .await;
 
-                {
-                    let mut config_handler = config_handler.lock().unwrap();
-                    *config_handler = Some(new_config_handler);
-                }
-            } else {
-                let mut feed = feed.lock().unwrap();
-                *feed = Box::new(Dialog::new("Something went wrong.."));
-            }
-
-            let _ = tx.send(UpdateEvent::Redraw).await;
+            let mut feed = feed.lock().unwrap();
+            *feed = Box::new(Dialog::new("Something went wrong.."));
         });
     }
 
+    async fn listen_app_msg(
+        app_rx: mpsc::Receiver<AppMsg>,
+        tx: EventSender,
+        common_config: Arc<CommonConfigHandler>,
+        config: Arc<Box<dyn Config + Send + Sync>>,
+        feed: Arc<Mutex<Box<dyn Component + Send>>>,
+        subscriptions: Arc<Mutex<Option<Subscriptions>>>,
+    ) -> Result<(), ()> {
+        loop {
+            let msg = app_rx.recv().map_err(|_| ())?;
+            match msg {
+                AppMsg::RemoveSubscription(subscription) => {
+                    let data = config
+                        .remove_subscription(subscription)
+                        .await
+                        .unwrap()
+                        .map_err(|_| ())?;
+
+                    {
+                        let mut feed = feed.lock().unwrap();
+                        *feed = Box::new(Self::create_feed(&*common_config, &data));
+                    }
+
+                    if let Some(ref mut subscriptions) = *subscriptions.lock().unwrap() {
+                        subscriptions.update_channels(data.channels);
+                    }
+
+                    let _ = tx.send(UpdateEvent::Redraw).await;
+                }
+            }
+        }
+    }
+
     fn toggle_subscriptions(&self) -> UpdateEvent {
-        let config_handler = self.config_handler.lock().unwrap();
         let mut subscriptions = self.subscriptions.lock().unwrap();
         if subscriptions.is_some() {
             *subscriptions = None;
         } else {
-            if let Some(ref config_handler) = *config_handler {
-                if let Some(config_data) = &config_handler.config_data {
-                    *subscriptions = Some(Subscriptions::new(
-                        self.tx.clone(),
-                        self.app_tx.clone(),
-                        config_data.channels.clone(),
-                    ));
-                }
-            }
+            *subscriptions = Some(Subscriptions::new(
+                self.tx.clone(),
+                self.app_tx.clone(),
+                self.config.data().channels,
+            ));
         }
 
         UpdateEvent::Redraw
+    }
+
+    fn create_feed(common_config: &CommonConfigHandler, data: &ConfigData) -> Feed {
+        let last_played_timestamp = common_config.config().last_played_timestamp;
+        Feed::new(
+            data.videos.clone().into_iter().collect(),
+            last_played_timestamp,
+        )
     }
 }
 

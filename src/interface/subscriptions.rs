@@ -23,7 +23,6 @@ impl Subscriptions {
         app_tx: mpsc::Sender<AppMsg>,
         channels: HashMap<String, String>,
     ) -> Self {
-        // TODO: Handle empty map
         Subscriptions {
             tx,
             app_tx,
@@ -43,13 +42,15 @@ impl Subscriptions {
 
     fn move_up(&mut self) -> UpdateEvent {
         if self.selected > 0 {
-            self.selected = self.selected - 1;
+            self.selected -= 1;
         }
         UpdateEvent::Redraw
     }
 
     fn move_down(&mut self) -> UpdateEvent {
-        self.selected = std::cmp::min(self.selected + 1, self.channels.len() - 1);
+        if self.selected + 1 < self.channels.len() {
+            self.selected += 1;
+        }
         UpdateEvent::Redraw
     }
 

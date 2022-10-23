@@ -1,5 +1,5 @@
 use crate::{
-    interface::component::{Component, EventSender, Frame, UpdateEvent},
+    interface::component::{Component, Frame, UpdateEvent},
     video::Video,
 };
 use crossterm::event::{Event, KeyCode};
@@ -9,14 +9,28 @@ use tui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 
+struct VideoListItem {
+    pub video: Video,
+    pub selected: bool,
+}
+
 pub struct Feed {
-    videos: Vec<Video>,
+    videos: Vec<VideoListItem>,
     current_item: usize,
 }
 
 impl Feed {
-    pub fn new(_tx: EventSender, mut videos: Vec<Video>) -> Self {
+    pub fn new(mut videos: Vec<Video>, last_played_timestamp: i64) -> Self {
         videos.reverse();
+
+        let videos = videos
+            .iter()
+            .map(|video| VideoListItem {
+                video: video.to_owned(),
+                selected: video.date.timestamp() > last_played_timestamp,
+            })
+            .collect();
+
         Self {
             videos,
             current_item: 0,
@@ -25,20 +39,22 @@ impl Feed {
 
     fn toggle_current_item(&mut self) -> UpdateEvent {
         if let Some(video) = self.videos.get_mut(self.current_item) {
-            video.toggle_selected();
+            video.selected = !video.selected;
         }
         UpdateEvent::Redraw
     }
 
     fn move_up(&mut self) -> UpdateEvent {
         if self.current_item > 0 {
-            self.current_item = self.current_item - 1;
+            self.current_item -= 1;
         }
         UpdateEvent::Redraw
     }
 
     fn move_down(&mut self) -> UpdateEvent {
-        self.current_item = std::cmp::min(self.current_item + 1, self.videos.len() - 1);
+        if self.current_item + 1 < self.videos.len() {
+            self.current_item += 1;
+        }
         UpdateEvent::Redraw
     }
 
@@ -46,10 +62,14 @@ impl Feed {
         let mut items: Vec<ListItem> = Vec::new();
 
         for (i, video) in self.videos.iter().enumerate() {
-            let mut item = ListItem::new(video.get_label(width));
+            let selected = if video.selected { "✓" } else { " " };
+            let label = video.video.get_label(width);
+            let mut item = ListItem::new(format!("{selected} {label}"));
+
             if i == self.current_item {
                 item = item.style(Style::default().fg(Color::Green));
             }
+
             items.push(item);
         }
 
@@ -60,12 +80,11 @@ impl Feed {
 
     fn create_description(&self) -> Paragraph<'_> {
         // current_item is always within the bounds of videos
-        let description = self
-            .videos
-            .get(self.current_item)
-            .unwrap()
-            .description
-            .to_owned();
+        let description = if let Some(video) = self.videos.get(self.current_item) {
+            video.video.description.to_owned()
+        } else {
+            "".to_string()
+        };
 
         Paragraph::new(description)
             .block(Block::default().title("Description").borders(Borders::ALL))
