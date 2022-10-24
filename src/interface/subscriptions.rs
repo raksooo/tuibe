@@ -3,7 +3,8 @@ use crate::interface::{
     component::{Component, EventSender, Frame, UpdateEvent},
 };
 use crossterm::event::{Event, KeyCode};
-use std::{collections::HashMap, sync::mpsc};
+use std::collections::HashMap;
+use tokio::sync::mpsc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -55,10 +56,11 @@ impl Subscriptions {
     }
 
     fn remove_selected(&mut self) -> UpdateEvent {
-        let subscription = self.channels.keys().nth(self.selected).unwrap();
-        self.app_tx
-            .send(AppMsg::RemoveSubscription(subscription.to_string()))
-            .unwrap();
+        let app_tx = self.app_tx.clone();
+        let subscription = self.channels.keys().nth(self.selected).unwrap().to_string();
+        tokio::spawn(async move {
+            let _ = app_tx.send(AppMsg::RemoveSubscription(subscription)).await;
+        });
         UpdateEvent::None
     }
 

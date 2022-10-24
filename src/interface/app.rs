@@ -3,17 +3,19 @@ use crate::{
     config::{Config, ConfigData},
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
+        config_provider::ConfigProviderMsg,
         dialog::Dialog,
         feed::Feed,
         subscriptions::Subscriptions,
     },
 };
 use crossterm::event::{Event, KeyCode};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
+#[derive(Debug)]
 pub enum AppMsg {
-    Reload,
     RemoveSubscription(String),
 }
 
@@ -22,34 +24,41 @@ pub struct App {
     config: Arc<Box<dyn Config + Send + Sync>>,
 
     tx: EventSender,
+    config_tx: mpsc::Sender<ConfigProviderMsg>,
     app_tx: mpsc::Sender<AppMsg>,
     feed: Arc<Mutex<Box<dyn Component + Send>>>,
     subscriptions: Arc<Mutex<Option<Subscriptions>>>,
 }
 
 impl App {
-    pub fn new<C>(tx: EventSender, common_config: CommonConfigHandler, config: C) -> Self
+    pub fn new<C>(
+        tx: EventSender,
+        config_tx: mpsc::Sender<ConfigProviderMsg>,
+        common_config: CommonConfigHandler,
+        config: C,
+    ) -> Self
     where
         C: Config + Send + Sync + 'static,
     {
-        let (app_tx, app_rx) = mpsc::channel();
+        let (app_tx, app_rx) = mpsc::channel(100);
 
-        let feed = Self::create_feed(app_tx.clone(), &common_config, &config.data());
+        let feed = Self::create_feed(&common_config, &config.data());
         let mut app = Self {
             common_config: Arc::new(common_config),
             config: Arc::new(Box::new(config)),
 
             tx: tx.clone(),
+            config_tx,
             app_tx: app_tx.clone(),
             feed: Arc::new(Mutex::new(Box::new(feed))),
             subscriptions: Arc::new(Mutex::new(None)),
         };
 
-        app.init_channel(app_rx, app_tx);
+        app.init_channel(app_rx);
         app
     }
 
-    fn init_channel(&mut self, app_rx: mpsc::Receiver<AppMsg>, app_tx: mpsc::Sender<AppMsg>) {
+    fn init_channel(&mut self, app_rx: mpsc::Receiver<AppMsg>) {
         let tx = self.tx.clone();
         let common_config = Arc::clone(&self.common_config);
         let config = Arc::clone(&self.config);
@@ -59,7 +68,6 @@ impl App {
         tokio::spawn(async move {
             let _ = Self::listen_app_msg(
                 app_rx,
-                app_tx,
                 tx,
                 Arc::clone(&common_config),
                 Arc::clone(&config),
@@ -74,8 +82,7 @@ impl App {
     }
 
     async fn listen_app_msg(
-        app_rx: mpsc::Receiver<AppMsg>,
-        app_tx: mpsc::Sender<AppMsg>,
+        mut app_rx: mpsc::Receiver<AppMsg>,
         tx: EventSender,
         common_config: Arc<CommonConfigHandler>,
         config: Arc<Box<dyn Config + Send + Sync>>,
@@ -83,8 +90,7 @@ impl App {
         subscriptions: Arc<Mutex<Option<Subscriptions>>>,
     ) -> Result<(), ()> {
         loop {
-            let app_tx = app_tx.clone();
-            let msg = app_rx.recv().map_err(|_| ())?;
+            let msg = app_rx.recv().await.ok_or(())?;
             match msg {
                 AppMsg::RemoveSubscription(subscription) => {
                     let data = config
@@ -94,30 +100,12 @@ impl App {
                         .map_err(|_| ())?;
                     Self::propagate_data(
                         tx.clone(),
-                        app_tx,
                         Arc::clone(&common_config),
                         Arc::clone(&feed),
                         Arc::clone(&subscriptions),
                         data,
-                    ).await;
-                }
-                AppMsg::Reload => {
-                    let data_rx = config.fetch();
-                    let _ = tx.send(UpdateEvent::Redraw).await;
-
-                    let data = data_rx
-                        .await
-                        .unwrap()
-                        .map_err(|_| ())?;
-
-                    Self::propagate_data(
-                        tx.clone(),
-                        app_tx,
-                        Arc::clone(&common_config),
-                        Arc::clone(&feed),
-                        Arc::clone(&subscriptions),
-                        data,
-                    ).await;
+                    )
+                    .await;
                 }
             }
         }
@@ -125,7 +113,6 @@ impl App {
 
     async fn propagate_data(
         tx: EventSender,
-        app_tx: mpsc::Sender<AppMsg>,
         common_config: Arc<CommonConfigHandler>,
         feed: Arc<Mutex<Box<dyn Component + Send>>>,
         subscriptions: Arc<Mutex<Option<Subscriptions>>>,
@@ -133,7 +120,7 @@ impl App {
     ) {
         {
             let mut feed = feed.lock().unwrap();
-            *feed = Box::new(Self::create_feed(app_tx, &*common_config, &data));
+            *feed = Box::new(Self::create_feed(&*common_config, &data));
         }
 
         if let Some(ref mut subscriptions) = *subscriptions.lock().unwrap() {
@@ -158,14 +145,17 @@ impl App {
         UpdateEvent::Redraw
     }
 
-    fn create_feed(
-        app_tx: mpsc::Sender<AppMsg>,
-        common_config: &CommonConfigHandler,
-        data: &ConfigData,
-    ) -> Feed {
+    fn reload(&self) -> UpdateEvent {
+        let config_tx = self.config_tx.clone();
+        tokio::spawn(async move {
+            let _ = config_tx.send(ConfigProviderMsg::Reload).await;
+        });
+        UpdateEvent::None
+    }
+
+    fn create_feed(common_config: &CommonConfigHandler, data: &ConfigData) -> Feed {
         let last_played_timestamp = common_config.config().last_played_timestamp;
         Feed::new(
-            app_tx,
             data.videos.clone().into_iter().collect(),
             last_played_timestamp,
         )
@@ -201,6 +191,7 @@ impl Component for App {
             match event.code {
                 KeyCode::Char('q') => return UpdateEvent::Quit,
                 KeyCode::Char('s') => return self.toggle_subscriptions(),
+                KeyCode::Char('r') => return self.reload(),
                 _ => (),
             }
         }

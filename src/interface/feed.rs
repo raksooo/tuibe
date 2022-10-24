@@ -1,12 +1,8 @@
 use crate::{
-    interface::{
-        app::AppMsg,
-        component::{Component, Frame, UpdateEvent},
-    },
+    interface::component::{Component, Frame, UpdateEvent},
     video::Video,
 };
 use crossterm::event::{Event, KeyCode};
-use std::sync::mpsc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -19,17 +15,12 @@ struct VideoListItem {
 }
 
 pub struct Feed {
-    app_tx: mpsc::Sender<AppMsg>,
     videos: Vec<VideoListItem>,
     current_item: usize,
 }
 
 impl Feed {
-    pub fn new(
-        app_tx: mpsc::Sender<AppMsg>,
-        mut videos: Vec<Video>,
-        last_played_timestamp: i64,
-    ) -> Self {
+    pub fn new(mut videos: Vec<Video>, last_played_timestamp: i64) -> Self {
         videos.reverse();
 
         let videos = videos
@@ -41,7 +32,6 @@ impl Feed {
             .collect();
 
         Self {
-            app_tx,
             videos,
             current_item: 0,
         }
@@ -66,11 +56,6 @@ impl Feed {
             video.selected = !video.selected;
         }
         UpdateEvent::Redraw
-    }
-
-    fn reload(&self) -> UpdateEvent {
-        self.app_tx.send(AppMsg::Reload).unwrap();
-        UpdateEvent::None
     }
 
     fn create_list(&self, width: usize) -> List<'_> {
@@ -130,7 +115,6 @@ impl Component for Feed {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char(' ') => self.toggle_current_item(),
-                KeyCode::Char('r') => self.reload(),
                 _ => UpdateEvent::None,
             }
         } else {
