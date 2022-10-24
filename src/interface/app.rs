@@ -19,15 +19,20 @@ pub enum AppMsg {
     RemoveSubscription(String),
 }
 
+struct AppInner {
+    common_config: CommonConfigHandler,
+    config: Box<dyn Config + Send + Sync>,
+
+    feed: Mutex<Box<dyn Component + Send>>,
+    subscriptions: Mutex<Option<Subscriptions>>,
+}
+
 pub struct App {
-    common_config: Arc<CommonConfigHandler>,
-    config: Arc<Box<dyn Config + Send + Sync>>,
+    inner: Arc<AppInner>,
 
     tx: EventSender,
     config_tx: mpsc::Sender<ConfigProviderMsg>,
     app_tx: mpsc::Sender<AppMsg>,
-    feed: Arc<Mutex<Box<dyn Component + Send>>>,
-    subscriptions: Arc<Mutex<Option<Subscriptions>>>,
 }
 
 impl App {
@@ -43,15 +48,19 @@ impl App {
         let (app_tx, app_rx) = mpsc::channel(100);
 
         let feed = Self::create_feed(&common_config, &config.data());
-        let mut app = Self {
-            common_config: Arc::new(common_config),
-            config: Arc::new(Box::new(config)),
 
+        let inner = AppInner {
+            common_config: common_config,
+            config: Box::new(config),
+            feed: Mutex::new(Box::new(feed)),
+            subscriptions: Mutex::new(None),
+        };
+
+        let mut app = Self {
+            inner: Arc::new(inner),
             tx: tx.clone(),
             config_tx,
             app_tx: app_tx.clone(),
-            feed: Arc::new(Mutex::new(Box::new(feed))),
-            subscriptions: Arc::new(Mutex::new(None)),
         };
 
         app.init_channel(app_rx);
@@ -60,23 +69,11 @@ impl App {
 
     fn init_channel(&mut self, app_rx: mpsc::Receiver<AppMsg>) {
         let tx = self.tx.clone();
-        let common_config = Arc::clone(&self.common_config);
-        let config = Arc::clone(&self.config);
-        let feed = Arc::clone(&self.feed);
-        let subscriptions = Arc::clone(&self.subscriptions);
+        let inner = Arc::clone(&self.inner);
 
         tokio::spawn(async move {
-            let _ = Self::listen_app_msg(
-                app_rx,
-                tx,
-                Arc::clone(&common_config),
-                Arc::clone(&config),
-                Arc::clone(&feed),
-                Arc::clone(&subscriptions),
-            )
-            .await;
-
-            let mut feed = feed.lock().unwrap();
+            let _ = Self::listen_app_msg(app_rx, tx, Arc::clone(&inner)).await;
+            let mut feed = inner.feed.lock().unwrap();
             *feed = Box::new(Dialog::new("Something went wrong.."));
         });
     }
@@ -84,46 +81,31 @@ impl App {
     async fn listen_app_msg(
         mut app_rx: mpsc::Receiver<AppMsg>,
         tx: EventSender,
-        common_config: Arc<CommonConfigHandler>,
-        config: Arc<Box<dyn Config + Send + Sync>>,
-        feed: Arc<Mutex<Box<dyn Component + Send>>>,
-        subscriptions: Arc<Mutex<Option<Subscriptions>>>,
+        inner: Arc<AppInner>,
     ) -> Result<(), ()> {
         loop {
             let msg = app_rx.recv().await.ok_or(())?;
             match msg {
                 AppMsg::RemoveSubscription(subscription) => {
-                    let data = config
+                    let data = inner
+                        .config
                         .remove_subscription(subscription)
                         .await
                         .unwrap()
                         .map_err(|_| ())?;
-                    Self::propagate_data(
-                        tx.clone(),
-                        Arc::clone(&common_config),
-                        Arc::clone(&feed),
-                        Arc::clone(&subscriptions),
-                        data,
-                    )
-                    .await;
+                    Self::propagate_data(tx.clone(), Arc::clone(&inner), data).await;
                 }
             }
         }
     }
 
-    async fn propagate_data(
-        tx: EventSender,
-        common_config: Arc<CommonConfigHandler>,
-        feed: Arc<Mutex<Box<dyn Component + Send>>>,
-        subscriptions: Arc<Mutex<Option<Subscriptions>>>,
-        data: ConfigData,
-    ) {
+    async fn propagate_data(tx: EventSender, inner: Arc<AppInner>, data: ConfigData) {
         {
-            let mut feed = feed.lock().unwrap();
-            *feed = Box::new(Self::create_feed(&*common_config, &data));
+            let mut feed = inner.feed.lock().unwrap();
+            *feed = Box::new(Self::create_feed(&inner.common_config, &data));
         }
 
-        if let Some(ref mut subscriptions) = *subscriptions.lock().unwrap() {
+        if let Some(ref mut subscriptions) = *inner.subscriptions.lock().unwrap() {
             subscriptions.update_channels(data.channels);
         }
 
@@ -131,14 +113,14 @@ impl App {
     }
 
     fn toggle_subscriptions(&self) -> UpdateEvent {
-        let mut subscriptions = self.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
         if subscriptions.is_some() {
             *subscriptions = None;
         } else {
             *subscriptions = Some(Subscriptions::new(
                 self.tx.clone(),
                 self.app_tx.clone(),
-                self.config.data().channels,
+                self.inner.config.data().channels,
             ));
         }
 
@@ -164,7 +146,7 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, size: Rect) {
-        let mut subscriptions = self.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
         let subscriptions_numerator = subscriptions.as_ref().map_or(0, |_| 1);
 
         let chunks = Layout::default()
@@ -182,7 +164,7 @@ impl Component for App {
             subscriptions.draw(f, chunks[0]);
         }
 
-        let mut feed = self.feed.lock().unwrap();
+        let mut feed = self.inner.feed.lock().unwrap();
         feed.draw(f, chunks[1]);
     }
 
@@ -196,11 +178,11 @@ impl Component for App {
             }
         }
 
-        let mut subscriptions = self.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
         if let Some(ref mut subscriptions) = *subscriptions {
             subscriptions.handle_event(event)
         } else {
-            let mut feed = self.feed.lock().unwrap();
+            let mut feed = self.inner.feed.lock().unwrap();
             feed.handle_event(event)
         }
     }
