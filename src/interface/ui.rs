@@ -1,4 +1,4 @@
-use crate::interface::component::{Backend, Component, EventSender, UpdateEvent};
+use super::component::{Backend, Component, EventSender, UpdateEvent};
 use crossterm::event::{Event, EventStream};
 use futures_timer::Delay;
 use std::io;

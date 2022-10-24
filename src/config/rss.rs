@@ -1,7 +1,7 @@
+use super::file_handler::ConfigFileHandler;
 use crate::{
     config::{
         config::{Config, ConfigData, ConfigUpdate},
-        config_file_handler::ConfigFileHandler,
         error::{ConfigError, FeedError},
     },
     video::Video,

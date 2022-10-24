@@ -1,9 +1,10 @@
-pub mod component;
+pub mod config_provider;
 pub mod ui;
 
-pub mod app;
-pub mod config_provider;
-pub mod dialog;
-pub mod feed;
-pub mod loading_indicator;
-pub mod subscriptions;
+mod app;
+mod dialog;
+mod feed;
+mod loading_indicator;
+mod subscriptions;
+
+mod component;

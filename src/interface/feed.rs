@@ -1,7 +1,5 @@
-use crate::{
-    interface::component::{Component, Frame, UpdateEvent},
-    video::Video,
-};
+use super::component::{Component, Frame, UpdateEvent};
+use crate::video::Video;
 use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,

@@ -1,11 +1,12 @@
-use crate::config::{config_file_handler::ConfigFileHandler, error::ConfigError};
+use super::file_handler::ConfigFileHandler;
+use crate::config::error::ConfigError;
 use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
-const CONFIG_NAME: &str = "common";
+const CONFIG_NAME: &str = "config";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CommonConfig {

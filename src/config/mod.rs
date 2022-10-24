@@ -1,5 +1,6 @@
-pub mod common_config;
+pub mod common;
 pub mod config;
-pub mod config_file_handler;
 pub mod error;
-pub mod rss_config;
+pub mod rss;
+
+mod file_handler;

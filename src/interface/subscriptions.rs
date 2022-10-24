@@ -1,4 +1,4 @@
-use crate::interface::{
+use super::{
     app::AppMsg,
     component::{Component, EventSender, Frame, UpdateEvent},
 };

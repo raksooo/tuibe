@@ -1,15 +1,13 @@
-use crate::{
-    config::{
-        common_config::CommonConfigHandler,
-        config::{Config, ConfigData},
-    },
-    interface::{
-        component::{Component, EventSender, Frame, UpdateEvent},
-        config_provider::ConfigProviderMsg,
-        dialog::Dialog,
-        feed::Feed,
-        subscriptions::Subscriptions,
-    },
+use super::{
+    component::{Component, EventSender, Frame, UpdateEvent},
+    config_provider::ConfigProviderMsg,
+    dialog::Dialog,
+    feed::Feed,
+    subscriptions::Subscriptions,
+};
+use crate::config::{
+    common::CommonConfigHandler,
+    config::{Config, ConfigData},
 };
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;

@@ -1,4 +1,4 @@
-use crate::interface::{
+use super::{
     component::{Component, EventSender, Frame, UpdateEvent},
     dialog::Dialog,
 };
