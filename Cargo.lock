@@ -1392,6 +1392,7 @@ dependencies = [
  "crossterm",
  "err-derive",
  "futures-timer",
+ "parking_lot",
  "reqwest",
  "serde",
  "tokio",

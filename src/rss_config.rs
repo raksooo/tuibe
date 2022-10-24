@@ -5,11 +5,12 @@ use crate::{
     video::Video,
 };
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     future::Future,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 use tokio::sync::oneshot;
 
@@ -99,15 +100,15 @@ impl RssConfigHandler {
         F: FnOnce(RssConfig, ConfigData) -> R + Send,
     {
         let (old_config, old_data) = {
-            let config = config.lock().unwrap();
-            let data = data.lock().unwrap();
+            let config = config.lock();
+            let data = data.lock();
             (config.clone(), data.clone())
         };
 
         let (new_config, new_data) = f(old_config, old_data).await?;
         {
-            let mut config = config.lock().unwrap();
-            let mut data = data.lock().unwrap();
+            let mut config = config.lock();
+            let mut data = data.lock();
             *config = new_config.clone();
             *data = new_data.clone();
         };
@@ -137,7 +138,7 @@ impl Config for RssConfigHandler {
 
     fn fetch(&self) -> oneshot::Receiver<ConfigUpdate> {
         {
-            let mut data = self.data.lock().unwrap();
+            let mut data = self.data.lock();
             data.channels.clear();
             data.videos.clear();
         }
@@ -170,7 +171,7 @@ impl Config for RssConfigHandler {
     }
 
     fn data(&self) -> ConfigData {
-        let data = self.data.lock().unwrap();
+        let data = self.data.lock();
         data.clone()
     }
 }

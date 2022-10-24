@@ -3,10 +3,8 @@ use crate::interface::{
     dialog::Dialog,
 };
 use futures_timer::Delay;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 use tui::layout::Rect;
 
@@ -24,7 +22,7 @@ impl LoadingIndicator {
         let handle = tokio::spawn(async move {
             Delay::new(Duration::from_millis(500)).await;
             {
-                let mut dots = dots_async.lock().unwrap();
+                let mut dots = dots_async.lock();
                 *dots += 1;
                 *dots %= 4;
             }
@@ -39,7 +37,7 @@ impl LoadingIndicator {
     }
 
     fn before_draw(&mut self) {
-        let dots = self.dots.lock().unwrap();
+        let dots = self.dots.lock();
         let text = Self::format_text(*dots);
         self.dialog.update_text(&text);
     }

@@ -11,7 +11,8 @@ use crate::{
     rss_config::RssConfigHandler,
 };
 use crossterm::event::Event;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tui::layout::Rect;
 
@@ -53,7 +54,7 @@ impl ConfigProvider {
                 match config_rx.recv().await.unwrap() {
                     ConfigProviderMsg::Reload => {
                         {
-                            let mut app = app.lock().unwrap();
+                            let mut app = app.lock();
                             *app = Box::new(LoadingIndicator::new(program_tx.clone()));
                         }
                         let _ = program_tx.send(UpdateEvent::Redraw).await;
@@ -98,7 +99,7 @@ impl ConfigProvider {
         };
 
         {
-            let mut app = app.lock().unwrap();
+            let mut app = app.lock();
             *app = new_app;
         }
     }
@@ -114,12 +115,12 @@ impl ConfigProvider {
 
 impl Component for ConfigProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut app = self.app.lock().unwrap();
+        let mut app = self.app.lock();
         app.draw(f, area);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {
-        let mut app = self.app.lock().unwrap();
+        let mut app = self.app.lock();
         app.handle_event(event)
     }
 }

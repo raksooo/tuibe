@@ -1,7 +1,8 @@
 use crate::{config_file_handler::ConfigFileHandler, error::ConfigError};
 use chrono::Utc;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::oneshot;
 
 const CONFIG_NAME: &str = "common";
@@ -55,7 +56,7 @@ impl CommonConfigHandler {
     }
 
     pub fn config(&self) -> CommonConfig {
-        let config = self.config.lock().unwrap();
+        let config = self.config.lock();
         config.clone()
     }
 
@@ -84,7 +85,7 @@ impl CommonConfigHandler {
         F: FnOnce(CommonConfig) -> CommonConfig + Send + 'static,
     {
         let new_config = {
-            let config = config.lock().unwrap();
+            let config = config.lock();
             f(config.clone())
         };
 

@@ -10,7 +10,8 @@ use crate::{
     },
 };
 use crossterm::event::{Event, KeyCode};
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
@@ -73,7 +74,7 @@ impl App {
 
         tokio::spawn(async move {
             let _ = Self::listen_app_msg(app_rx, program_tx, Arc::clone(&inner)).await;
-            let mut feed = inner.feed.lock().unwrap();
+            let mut feed = inner.feed.lock();
             *feed = Box::new(Dialog::new("Something went wrong.."));
         });
     }
@@ -101,11 +102,11 @@ impl App {
 
     async fn propagate_data(program_tx: EventSender, inner: Arc<AppInner>, data: ConfigData) {
         {
-            let mut feed = inner.feed.lock().unwrap();
+            let mut feed = inner.feed.lock();
             *feed = Box::new(Self::create_feed(&inner.common_config, &data));
         }
 
-        if let Some(ref mut subscriptions) = *inner.subscriptions.lock().unwrap() {
+        if let Some(ref mut subscriptions) = *inner.subscriptions.lock() {
             subscriptions.update_channels(data.channels);
         }
 
@@ -113,7 +114,7 @@ impl App {
     }
 
     fn toggle_subscriptions(&self) -> UpdateEvent {
-        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock();
         if subscriptions.is_some() {
             *subscriptions = None;
         } else {
@@ -146,7 +147,7 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock();
         let subscriptions_numerator = subscriptions.as_ref().map_or(0, |_| 1);
 
         let chunks = Layout::default()
@@ -164,7 +165,7 @@ impl Component for App {
             subscriptions.draw(f, chunks[0]);
         }
 
-        let mut feed = self.inner.feed.lock().unwrap();
+        let mut feed = self.inner.feed.lock();
         feed.draw(f, chunks[1]);
     }
 
@@ -178,11 +179,11 @@ impl Component for App {
             }
         }
 
-        let mut subscriptions = self.inner.subscriptions.lock().unwrap();
+        let mut subscriptions = self.inner.subscriptions.lock();
         if let Some(ref mut subscriptions) = *subscriptions {
             subscriptions.handle_event(event)
         } else {
-            let mut feed = self.inner.feed.lock().unwrap();
+            let mut feed = self.inner.feed.lock();
             feed.handle_event(event)
         }
     }
