@@ -22,14 +22,14 @@ impl Dialog {
 }
 
 impl Component for Dialog {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         let dialog = Paragraph::new(self.text.to_string())
             .block(Block::default().borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
             .alignment(Alignment::Center);
 
-        let size = Rect::new((size.width / 2) - 15, (size.height / 2) - 2, 30, 3);
+        let area = Rect::new((area.width / 2) - 15, (area.height / 2) - 2, 30, 3);
 
-        f.render_widget(dialog, size);
+        f.render_widget(dialog, area);
     }
 }

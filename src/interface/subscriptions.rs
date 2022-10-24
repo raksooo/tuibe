@@ -82,9 +82,9 @@ impl Subscriptions {
 }
 
 impl Component for Subscriptions {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         let list = self.create_list();
-        f.render_widget(list, size);
+        f.render_widget(list, area);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {

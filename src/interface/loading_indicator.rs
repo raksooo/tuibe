@@ -58,8 +58,8 @@ impl Drop for LoadingIndicator {
 }
 
 impl Component for LoadingIndicator {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         self.before_draw();
-        self.dialog.draw(f, size);
+        self.dialog.draw(f, area);
     }
 }

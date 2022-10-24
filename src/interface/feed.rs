@@ -94,17 +94,17 @@ impl Feed {
 }
 
 impl Component for Feed {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         let description_height = 10;
-        let description_y = size.height - description_height;
-        let list_size = Rect::new(size.x, 0, size.width, description_y - 10);
-        let description_size = Rect::new(size.x, description_y, size.width, description_height);
+        let description_y = area.height - description_height;
+        let list_area = Rect::new(area.x, 0, area.width, description_y - 10);
+        let description_area = Rect::new(area.x, description_y, area.width, description_height);
 
-        let list = self.create_list(list_size.width.into());
+        let list = self.create_list(list_area.width.into());
         let description = self.create_description();
 
-        f.render_widget(list, list_size);
-        f.render_widget(description, description_size);
+        f.render_widget(list, list_area);
+        f.render_widget(description, description_area);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {

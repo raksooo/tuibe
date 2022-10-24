@@ -104,9 +104,9 @@ impl ConfigProvider {
 }
 
 impl Component for ConfigProvider {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         let mut app = self.app.lock().unwrap();
-        app.draw(f, size);
+        app.draw(f, area);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {

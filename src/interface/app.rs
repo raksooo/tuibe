@@ -145,7 +145,7 @@ impl App {
 }
 
 impl Component for App {
-    fn draw(&mut self, f: &mut Frame, size: Rect) {
+    fn draw(&mut self, f: &mut Frame, area: Rect) {
         let mut subscriptions = self.inner.subscriptions.lock().unwrap();
         let subscriptions_numerator = subscriptions.as_ref().map_or(0, |_| 1);
 
@@ -158,7 +158,7 @@ impl Component for App {
                 ]
                 .as_ref(),
             )
-            .split(size);
+            .split(area);
 
         if let Some(ref mut subscriptions) = *subscriptions {
             subscriptions.draw(f, chunks[0]);
