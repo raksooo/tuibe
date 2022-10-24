@@ -12,7 +12,7 @@ use tui::{
 };
 
 pub struct Subscriptions {
-    tx: EventSender,
+    program_tx: EventSender,
     app_tx: mpsc::Sender<AppMsg>,
     channels: HashMap<String, String>,
     selected: usize,
@@ -20,12 +20,12 @@ pub struct Subscriptions {
 
 impl Subscriptions {
     pub fn new(
-        tx: EventSender,
+        program_tx: EventSender,
         app_tx: mpsc::Sender<AppMsg>,
         channels: HashMap<String, String>,
     ) -> Self {
         Subscriptions {
-            tx,
+            program_tx,
             app_tx,
             channels,
             selected: 0,
@@ -35,9 +35,9 @@ impl Subscriptions {
     pub fn update_channels(&mut self, channels: HashMap<String, String>) {
         self.channels = channels;
 
-        let tx = self.tx.clone();
+        let program_tx = self.program_tx.clone();
         tokio::spawn(async move {
-            let _ = tx.send(UpdateEvent::Redraw).await;
+            let _ = program_tx.send(UpdateEvent::Redraw).await;
         });
     }
 

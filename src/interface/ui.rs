@@ -13,16 +13,17 @@ where
     F: FnOnce(EventSender) -> C,
 {
     let mut event_reader = EventStream::new();
-    let (tx, mut rx) = mpsc::channel(100);
+    let (program_tx, mut program_rx) = mpsc::channel(100);
 
-    let mut root = creator(tx.clone());
-    tx.send(UpdateEvent::Redraw)
+    let mut root = creator(program_tx.clone());
+    program_tx
+        .send(UpdateEvent::Redraw)
         .await
         .expect("Failed to send update event");
     loop {
         select! {
-            event = event_reader.next() => handle_input_event(&mut root, tx.clone(), event),
-            event = rx.recv() => {
+            event = event_reader.next() => handle_input_event(&mut root, program_tx.clone(), event),
+            event = program_rx.recv() => {
                 if let Some(event) = event {
                     match event {
                         UpdateEvent::Redraw => perform_draw(terminal, &mut root),
@@ -39,13 +40,13 @@ where
 
 fn handle_input_event(
     root: &mut impl Component,
-    tx: EventSender,
+    program_tx: EventSender,
     event: Option<Result<Event, io::Error>>,
 ) {
     if let Some(Ok(event)) = event {
         let event = root.handle_event(event);
         tokio::spawn(async move {
-            let _ = tx.send(event).await;
+            let _ = program_tx.send(event).await;
         });
     }
 }

@@ -30,14 +30,14 @@ struct AppInner {
 pub struct App {
     inner: Arc<AppInner>,
 
-    tx: EventSender,
+    program_tx: EventSender,
     config_tx: mpsc::Sender<ConfigProviderMsg>,
     app_tx: mpsc::Sender<AppMsg>,
 }
 
 impl App {
     pub fn new<C>(
-        tx: EventSender,
+        program_tx: EventSender,
         config_tx: mpsc::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
         config: C,
@@ -58,7 +58,7 @@ impl App {
 
         let mut app = Self {
             inner: Arc::new(inner),
-            tx: tx.clone(),
+            program_tx: program_tx.clone(),
             config_tx,
             app_tx: app_tx.clone(),
         };
@@ -68,11 +68,11 @@ impl App {
     }
 
     fn init_channel(&mut self, app_rx: mpsc::Receiver<AppMsg>) {
-        let tx = self.tx.clone();
+        let program_tx = self.program_tx.clone();
         let inner = Arc::clone(&self.inner);
 
         tokio::spawn(async move {
-            let _ = Self::listen_app_msg(app_rx, tx, Arc::clone(&inner)).await;
+            let _ = Self::listen_app_msg(app_rx, program_tx, Arc::clone(&inner)).await;
             let mut feed = inner.feed.lock().unwrap();
             *feed = Box::new(Dialog::new("Something went wrong.."));
         });
@@ -80,7 +80,7 @@ impl App {
 
     async fn listen_app_msg(
         mut app_rx: mpsc::Receiver<AppMsg>,
-        tx: EventSender,
+        program_tx: EventSender,
         inner: Arc<AppInner>,
     ) -> Result<(), ()> {
         loop {
@@ -93,13 +93,13 @@ impl App {
                         .await
                         .unwrap()
                         .map_err(|_| ())?;
-                    Self::propagate_data(tx.clone(), Arc::clone(&inner), data).await;
+                    Self::propagate_data(program_tx.clone(), Arc::clone(&inner), data).await;
                 }
             }
         }
     }
 
-    async fn propagate_data(tx: EventSender, inner: Arc<AppInner>, data: ConfigData) {
+    async fn propagate_data(program_tx: EventSender, inner: Arc<AppInner>, data: ConfigData) {
         {
             let mut feed = inner.feed.lock().unwrap();
             *feed = Box::new(Self::create_feed(&inner.common_config, &data));
@@ -109,7 +109,7 @@ impl App {
             subscriptions.update_channels(data.channels);
         }
 
-        let _ = tx.send(UpdateEvent::Redraw).await;
+        let _ = program_tx.send(UpdateEvent::Redraw).await;
     }
 
     fn toggle_subscriptions(&self) -> UpdateEvent {
@@ -118,7 +118,7 @@ impl App {
             *subscriptions = None;
         } else {
             *subscriptions = Some(Subscriptions::new(
-                self.tx.clone(),
+                self.program_tx.clone(),
                 self.app_tx.clone(),
                 self.inner.config.data().channels,
             ));

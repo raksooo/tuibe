@@ -17,7 +17,7 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
-    pub fn new(tx: EventSender) -> Self {
+    pub fn new(program_tx: EventSender) -> Self {
         let dots = Arc::new(Mutex::new(0));
         let dialog = Dialog::new(&Self::format_text(0));
         let dots_async = Arc::clone(&dots);
@@ -28,7 +28,7 @@ impl LoadingIndicator {
                 *dots += 1;
                 *dots %= 4;
             }
-            let _ = tx.send(UpdateEvent::Redraw).await;
+            let _ = program_tx.send(UpdateEvent::Redraw).await;
         });
 
         Self {
