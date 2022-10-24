@@ -1,4 +1,4 @@
-use crate::{config_file_handler::ConfigFileHandler, error::ConfigError};
+use crate::config::{config_file_handler::ConfigFileHandler, error::ConfigError};
 use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};

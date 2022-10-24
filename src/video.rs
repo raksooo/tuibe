@@ -1,4 +1,4 @@
-use crate::error::FeedError;
+use crate::config::error::FeedError;
 use atom_syndication::Entry;
 use chrono::{DateTime, FixedOffset};
 

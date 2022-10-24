@@ -1,7 +1,9 @@
 use crate::{
-    config::{Config, ConfigData, ConfigUpdate},
-    config_file_handler::ConfigFileHandler,
-    error::{ConfigError, FeedError},
+    config::{
+        config::{Config, ConfigData, ConfigUpdate},
+        config_file_handler::ConfigFileHandler,
+        error::{ConfigError, FeedError},
+    },
     video::Video,
 };
 use async_trait::async_trait;

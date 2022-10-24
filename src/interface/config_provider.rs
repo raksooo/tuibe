@@ -1,14 +1,14 @@
 use crate::{
-    common_config::CommonConfigHandler,
-    config::Config,
-    error::ConfigError,
+    config::{
+        common_config::CommonConfigHandler, config::Config, error::ConfigError,
+        rss_config::RssConfigHandler,
+    },
     interface::{
         app::App,
         component::{Component, EventSender, Frame, UpdateEvent},
         dialog::Dialog,
         loading_indicator::LoadingIndicator,
     },
-    rss_config::RssConfigHandler,
 };
 use crossterm::event::Event;
 use parking_lot::Mutex;

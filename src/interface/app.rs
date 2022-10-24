@@ -1,6 +1,8 @@
 use crate::{
-    common_config::CommonConfigHandler,
-    config::{Config, ConfigData},
+    config::{
+        common_config::CommonConfigHandler,
+        config::{Config, ConfigData},
+    },
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
         config_provider::ConfigProviderMsg,

@@ -1,4 +1,4 @@
-use crate::{error::ConfigError, video::Video};
+use crate::{config::error::ConfigError, video::Video};
 use async_trait::async_trait;
 use std::collections::{BTreeSet, HashMap};
 use tokio::sync::oneshot;
