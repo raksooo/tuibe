@@ -163,6 +163,7 @@ impl Config for RssConfigHandler {
     }
 
     fn remove_subscription(&self, id: String) -> oneshot::Receiver<ConfigUpdate> {
+        // TODO: Remove videos
         self.modify(|mut config, mut data| async move {
             config
                 .channel_ids
