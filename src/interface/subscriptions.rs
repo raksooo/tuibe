@@ -2,6 +2,7 @@ use super::{
     app::AppMsg,
     component::{Component, EventSender, Frame, UpdateEvent},
 };
+use crate::sender_ext::SenderExt;
 use crossterm::event::{Event, KeyCode};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -34,11 +35,7 @@ impl Subscriptions {
 
     pub fn update_channels(&mut self, channels: HashMap<String, String>) {
         self.channels = channels;
-
-        let program_tx = self.program_tx.clone();
-        tokio::spawn(async move {
-            let _ = program_tx.send(UpdateEvent::Redraw).await;
-        });
+        self.program_tx.send_sync(UpdateEvent::Redraw);
     }
 
     fn move_up(&mut self) -> UpdateEvent {
@@ -56,11 +53,9 @@ impl Subscriptions {
     }
 
     fn remove_selected(&mut self) -> UpdateEvent {
-        let app_tx = self.app_tx.clone();
         let subscription = self.channels.keys().nth(self.selected).unwrap().to_string();
-        tokio::spawn(async move {
-            let _ = app_tx.send(AppMsg::RemoveSubscription(subscription)).await;
-        });
+        self.app_tx
+            .send_sync(AppMsg::RemoveSubscription(subscription));
         UpdateEvent::None
     }
 

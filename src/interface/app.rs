@@ -5,9 +5,12 @@ use super::{
     feed::Feed,
     subscriptions::Subscriptions,
 };
-use crate::config::{
-    common::CommonConfigHandler,
-    config::{Config, ConfigData},
+use crate::{
+    config::{
+        common::CommonConfigHandler,
+        config::{Config, ConfigData},
+    },
+    sender_ext::SenderExt,
 };
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
@@ -129,10 +132,7 @@ impl App {
     }
 
     fn reload(&self) -> UpdateEvent {
-        let config_tx = self.config_tx.clone();
-        tokio::spawn(async move {
-            let _ = config_tx.send(ConfigProviderMsg::Reload).await;
-        });
+        self.config_tx.send_sync(ConfigProviderMsg::Reload);
         UpdateEvent::None
     }
 
