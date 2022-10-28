@@ -133,16 +133,16 @@ impl RssConfigHandler {
         R: Future<Output = Result<RssConfigHandlerData, ConfigError>> + Send,
         F: FnOnce(RssConfigHandlerData) -> R + Send + 'static,
     {
-        let (tx, rx) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         let data = Arc::clone(&self.data);
         let file_handler = Arc::clone(&self.file_handler);
 
         tokio::spawn(async move {
             let new_data = Self::modify_impl(data, file_handler, f).await;
-            let _ = tx.send(new_data);
+            let _ = sender.send(new_data);
         });
 
-        rx
+        receiver
     }
 
     async fn modify_impl<R, F>(

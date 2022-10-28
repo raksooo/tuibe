@@ -10,15 +10,15 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    program_tx: EventSender,
+    program_sender: EventSender,
     rss_config: RssConfigHandler,
     selected: usize,
 }
 
 impl RssConfigView {
-    pub fn new(program_tx: EventSender, rss_config: RssConfigHandler) -> Self {
+    pub fn new(program_sender: EventSender, rss_config: RssConfigHandler) -> Self {
         Self {
-            program_tx,
+            program_sender,
             rss_config,
             selected: 0,
         }
@@ -47,11 +47,11 @@ impl RssConfigView {
             .url
             .to_string();
 
-        let remove_rx = self.rss_config.remove_feed(url);
-        let program_tx = self.program_tx.clone();
+        let remove_receiver = self.rss_config.remove_feed(url);
+        let program_sender = self.program_sender.clone();
         tokio::spawn(async move {
-            remove_rx.await.unwrap().unwrap();
-            let _ = program_tx.send(UpdateEvent::Redraw).await;
+            remove_receiver.await.unwrap().unwrap();
+            let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
         UpdateEvent::None
     }

@@ -17,12 +17,12 @@ pub struct App {
     feed: FeedView,
     config: Box<dyn Component + Send>,
 
-    config_tx: mpsc::Sender<ConfigProviderMsg>,
+    config_sender: mpsc::Sender<ConfigProviderMsg>,
 }
 
 impl App {
     pub fn new(
-        config_tx: mpsc::Sender<ConfigProviderMsg>,
+        config_sender: mpsc::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
         config: impl Component + Send + 'static,
@@ -35,14 +35,14 @@ impl App {
             feed: FeedView::new(videos, last_played_timestamp),
             config: Box::new(config),
 
-            config_tx,
+            config_sender,
         }
     }
 
     fn toggle_config(&mut self) -> UpdateEvent {
         self.show_config = !self.show_config;
         if !self.show_config {
-            self.config_tx.send_sync(ConfigProviderMsg::Reload);
+            self.config_sender.send_sync(ConfigProviderMsg::Reload);
         }
         UpdateEvent::Redraw
     }

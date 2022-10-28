@@ -20,7 +20,10 @@ async fn main() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::create(&mut terminal, |tx| ConfigProvider::new(tx)).await;
+    ui::create(&mut terminal, |program_sender| {
+        ConfigProvider::new(program_sender)
+    })
+    .await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("Failed to clean up");

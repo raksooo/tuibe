@@ -65,16 +65,16 @@ impl CommonConfigHandler {
     where
         F: FnOnce(CommonConfig) -> CommonConfig + Send + 'static,
     {
-        let (tx, rx) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         let config = Arc::clone(&self.config);
         let file_handler = Arc::clone(&self.file_handler);
 
         tokio::spawn(async move {
             let new_data = Self::modify_impl(config, file_handler, f).await;
-            let _ = tx.send(new_data);
+            let _ = sender.send(new_data);
         });
 
-        rx
+        receiver
     }
 
     async fn modify_impl<F>(
