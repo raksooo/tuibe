@@ -1,41 +1,27 @@
-use super::{
-    app::AppMsg,
-    component::{Component, EventSender, Frame, UpdateEvent},
+use crate::{
+    config::rss::RssConfigHandler,
+    interface::component::{Component, EventSender, Frame, UpdateEvent},
 };
-use crate::sender_ext::SenderExt;
 use crossterm::event::{Event, KeyCode};
-use std::collections::HashMap;
-use tokio::sync::mpsc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, List, ListItem},
 };
 
-pub struct Subscriptions {
+pub struct RssConfigView {
     program_tx: EventSender,
-    app_tx: mpsc::Sender<AppMsg>,
-    channels: HashMap<String, String>,
+    rss_config: RssConfigHandler,
     selected: usize,
 }
 
-impl Subscriptions {
-    pub fn new(
-        program_tx: EventSender,
-        app_tx: mpsc::Sender<AppMsg>,
-        channels: HashMap<String, String>,
-    ) -> Self {
-        Subscriptions {
+impl RssConfigView {
+    pub fn new(program_tx: EventSender, rss_config: RssConfigHandler) -> Self {
+        Self {
             program_tx,
-            app_tx,
-            channels,
+            rss_config,
             selected: 0,
         }
-    }
-
-    pub fn update_channels(&mut self, channels: HashMap<String, String>) {
-        self.channels = channels;
-        self.program_tx.send_sync(UpdateEvent::Redraw);
     }
 
     fn move_up(&mut self) -> UpdateEvent {
@@ -46,24 +32,35 @@ impl Subscriptions {
     }
 
     fn move_down(&mut self) -> UpdateEvent {
-        if self.selected + 1 < self.channels.len() {
+        if self.selected + 1 < self.rss_config.feeds().len() {
             self.selected += 1;
         }
         UpdateEvent::Redraw
     }
 
     fn remove_selected(&mut self) -> UpdateEvent {
-        let subscription = self.channels.keys().nth(self.selected).unwrap().to_string();
-        self.app_tx
-            .send_sync(AppMsg::RemoveSubscription(subscription));
+        let url = self
+            .rss_config
+            .feeds()
+            .get(self.selected)
+            .unwrap()
+            .url
+            .to_string();
+
+        let remove_rx = self.rss_config.remove_feed(url);
+        let program_tx = self.program_tx.clone();
+        tokio::spawn(async move {
+            remove_rx.await.unwrap().unwrap();
+            let _ = program_tx.send(UpdateEvent::Redraw).await;
+        });
         UpdateEvent::None
     }
 
     fn create_list(&self) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
 
-        for (index, title) in self.channels.values().enumerate() {
-            let mut item = ListItem::new(title.to_string());
+        for (index, feed) in self.rss_config.feeds().iter().enumerate() {
+            let mut item = ListItem::new(feed.title.to_string());
             if index == self.selected {
                 item = item.style(Style::default().fg(Color::Green));
             }
@@ -71,12 +68,12 @@ impl Subscriptions {
         }
 
         List::new(items)
-            .block(Block::default().title("Channels").borders(Borders::ALL))
+            .block(Block::default().title("Feeds").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
     }
 }
 
-impl Component for Subscriptions {
+impl Component for RssConfigView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let list = self.create_list();
         f.render_widget(list, area);

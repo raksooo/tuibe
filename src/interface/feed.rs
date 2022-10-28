@@ -1,5 +1,5 @@
 use super::component::{Component, Frame, UpdateEvent};
-use crate::video::Video;
+use crate::config::config::Video;
 use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,
@@ -18,9 +18,7 @@ pub struct Feed {
 }
 
 impl Feed {
-    pub fn new(mut videos: Vec<Video>, last_played_timestamp: i64) -> Self {
-        videos.reverse();
-
+    pub fn new(videos: Vec<Video>, last_played_timestamp: i64) -> Self {
         let videos = videos
             .iter()
             .map(|video| VideoListItem {
