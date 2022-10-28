@@ -22,7 +22,8 @@ impl Dialog {
 }
 
 impl Component for Dialog {
-    fn draw(&mut self, f: &mut Frame, area: Rect) {
+    fn draw(&mut self, f: &mut Frame, _area: Rect) {
+        let area = f.size();
         let dialog = Paragraph::new(self.text.to_string())
             .block(Block::default().borders(Borders::ALL))
             .style(Style::default().fg(Color::White))

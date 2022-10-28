@@ -6,7 +6,7 @@ use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
 pub struct RssConfigView {
@@ -56,6 +56,16 @@ impl RssConfigView {
         UpdateEvent::None
     }
 
+    fn add_url(&self, url: String) -> UpdateEvent {
+        let add_receiver = self.rss_config.add_feed(url);
+        let program_sender = self.program_sender.clone();
+        tokio::spawn(async move {
+            add_receiver.await.unwrap().unwrap();
+            let _ = program_sender.send(UpdateEvent::Redraw).await;
+        });
+        UpdateEvent::None
+    }
+
     fn create_list(&self) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
 
@@ -75,22 +85,36 @@ impl RssConfigView {
 
 impl Component for RssConfigView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
+        let instruction_height = 2;
+        let list_area = Rect::new(area.x, area.y, area.width, area.height - instruction_height);
+        let instruction_area = Rect::new(
+            area.x,
+            area.height - instruction_height,
+            area.width,
+            instruction_height,
+        );
+
         let list = self.create_list();
-        f.render_widget(list, area);
+        f.render_widget(list, list_area);
+
+        let instruction = Paragraph::new("Paste URL to add")
+            .block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM))
+            .style(Style::default().fg(Color::White));
+        f.render_widget(instruction, instruction_area);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {
-        if let Event::Key(event) = event {
-            match event.code {
+        match event {
+            Event::Key(event) => match event.code {
                 KeyCode::Char('d') => self.remove_selected(),
                 KeyCode::Up => self.move_up(),
                 KeyCode::Down => self.move_down(),
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 _ => UpdateEvent::None,
-            }
-        } else {
-            UpdateEvent::None
+            },
+            Event::Paste(url) => self.add_url(url),
+            _ => UpdateEvent::None,
         }
     }
 }
