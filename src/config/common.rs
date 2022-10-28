@@ -39,13 +39,6 @@ impl CommonConfigHandler {
         })
     }
 
-    pub async fn set_player(&self, player: String) -> oneshot::Receiver<Result<(), ConfigError>> {
-        self.modify(move |mut config| {
-            config.player = player;
-            config
-        })
-    }
-
     pub async fn set_last_played_timestamp(
         &self,
         last_played_timestamp: i64,

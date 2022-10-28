@@ -26,9 +26,6 @@ pub enum ConfigError {
     #[error(display = "Failed to write to config file")]
     WriteConfigFile,
 
-    #[error(display = "Can't remove subscription since it doesn't exist")]
-    SubscriptionDoesNotExist,
-
     #[error(display = "Feed error: {:?}", error)]
     FeedError {
         #[error(from)]
