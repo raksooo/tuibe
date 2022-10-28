@@ -84,7 +84,7 @@ impl ConfigProvider {
                 config_sender,
                 common_config,
                 config.videos(),
-                RssConfigView::new(program_sender, config),
+                |app_sender| RssConfigView::new(program_sender, app_sender, config),
             )),
             Err(_) => Box::new(Dialog::new("Something went wrong..")),
         };
