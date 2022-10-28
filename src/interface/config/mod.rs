@@ -1,1 +1,1 @@
-pub mod rss;
+pub mod rss_view;

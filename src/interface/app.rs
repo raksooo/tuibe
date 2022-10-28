@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame, UpdateEvent},
     config_provider::ConfigProviderMsg,
-    feed::Feed,
+    feed_view::FeedView,
 };
 use crate::{
     config::{common::CommonConfigHandler, config::Video},
@@ -14,7 +14,7 @@ use tui::layout::{Constraint, Direction, Layout, Rect};
 pub struct App {
     show_config: bool,
 
-    feed: Feed,
+    feed: FeedView,
     config: Box<dyn Component + Send>,
 
     config_tx: mpsc::Sender<ConfigProviderMsg>,
@@ -32,7 +32,7 @@ impl App {
         Self {
             show_config: false,
 
-            feed: Feed::new(videos, last_played_timestamp),
+            feed: FeedView::new(videos, last_played_timestamp),
             config: Box::new(config),
 
             config_tx,

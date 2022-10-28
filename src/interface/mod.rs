@@ -5,7 +5,7 @@ mod config;
 
 mod app;
 mod dialog;
-mod feed;
+mod feed_view;
 mod loading_indicator;
 
 mod component;

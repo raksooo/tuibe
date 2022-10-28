@@ -1,7 +1,7 @@
 use super::{
     app::App,
     component::{Component, EventSender, Frame, UpdateEvent},
-    config::rss::RssConfigView,
+    config::rss_view::RssConfigView,
     dialog::Dialog,
     loading_indicator::LoadingIndicator,
 };

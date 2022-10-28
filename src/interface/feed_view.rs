@@ -12,12 +12,12 @@ struct VideoListItem {
     pub selected: bool,
 }
 
-pub struct Feed {
+pub struct FeedView {
     videos: Vec<VideoListItem>,
     current_item: usize,
 }
 
-impl Feed {
+impl FeedView {
     pub fn new(videos: Vec<Video>, last_played_timestamp: i64) -> Self {
         let videos = videos
             .iter()
@@ -89,7 +89,7 @@ impl Feed {
     }
 }
 
-impl Component for Feed {
+impl Component for FeedView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let description_height = 10;
         let description_y = area.height - description_height;
