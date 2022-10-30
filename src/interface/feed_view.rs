@@ -17,6 +17,7 @@ struct VideoListItem {
 }
 
 pub struct FeedView {
+    program_sender: mpsc::Sender<UpdateEvent>,
     app_sender: mpsc::Sender<AppMsg>,
 
     videos: Vec<VideoListItem>,
@@ -25,6 +26,7 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(
+        program_sender: mpsc::Sender<UpdateEvent>,
         app_sender: mpsc::Sender<AppMsg>,
         videos: Vec<Video>,
         last_played_timestamp: i64,
@@ -38,6 +40,7 @@ impl FeedView {
             .collect();
 
         Self {
+            program_sender,
             app_sender,
             videos,
             current_item: 0,
@@ -50,28 +53,28 @@ impl FeedView {
         }
     }
 
-    fn move_up(&mut self) -> UpdateEvent {
+    fn move_up(&mut self) {
         if self.current_item > 0 {
             self.current_item -= 1;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         }
-        UpdateEvent::Redraw
     }
 
-    fn move_down(&mut self) -> UpdateEvent {
+    fn move_down(&mut self) {
         if self.current_item + 1 < self.videos.len() {
             self.current_item += 1;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         }
-        UpdateEvent::Redraw
     }
 
-    fn toggle_current_item(&mut self) -> UpdateEvent {
+    fn toggle_current_item(&mut self) {
         if let Some(video) = self.videos.get_mut(self.current_item) {
             video.selected = !video.selected;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         }
-        UpdateEvent::Redraw
     }
 
-    fn play(&self) -> UpdateEvent {
+    fn play(&self) {
         let selected_videos = self
             .videos
             .iter()
@@ -79,7 +82,6 @@ impl FeedView {
             .map(|video| video.video.clone());
         self.app_sender
             .send_sync(AppMsg::Play(selected_videos.collect()));
-        UpdateEvent::None
     }
 
     fn create_list(&self, width: usize) -> List<'_> {
@@ -131,7 +133,7 @@ impl Component for FeedView {
         f.render_widget(description, description_area);
     }
 
-    fn handle_event(&mut self, event: Event) -> UpdateEvent {
+    fn handle_event(&mut self, event: Event) {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Up => self.move_up(),
@@ -140,10 +142,8 @@ impl Component for FeedView {
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char(' ') => self.toggle_current_item(),
                 KeyCode::Char('p') => self.play(),
-                _ => UpdateEvent::None,
+                _ => (),
             }
-        } else {
-            UpdateEvent::None
         }
     }
 }

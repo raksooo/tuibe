@@ -131,7 +131,7 @@ impl Component for ConfigProvider {
         app.draw(f, area);
     }
 
-    fn handle_event(&mut self, event: Event) -> UpdateEvent {
+    fn handle_event(&mut self, event: Event) {
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char('r') => {
@@ -141,13 +141,13 @@ impl Component for ConfigProvider {
                     tokio::spawn(async move {
                         Self::reload(program_sender, config_sender, app).await;
                     });
-                    return UpdateEvent::None;
+                    return;
                 }
                 _ => (),
             }
         }
 
         let mut app = self.app.lock();
-        app.handle_event(event)
+        app.handle_event(event);
     }
 }

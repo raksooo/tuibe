@@ -22,8 +22,5 @@ pub type EventSender = mpsc::Sender<UpdateEvent>;
 
 pub trait Component {
     fn draw(&mut self, f: &mut Frame, area: Rect);
-
-    fn handle_event(&mut self, _event: Event) -> UpdateEvent {
-        UpdateEvent::None
-    }
+    fn handle_event(&mut self, _event: Event) {}
 }

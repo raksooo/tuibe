@@ -43,26 +43,25 @@ impl RssConfigView {
         }
     }
 
-    fn close(&self) -> UpdateEvent {
+    fn close(&self) {
         self.app_sender.send_sync(AppMsg::CloseConfig);
-        UpdateEvent::None
     }
 
-    fn move_up(&mut self) -> UpdateEvent {
+    fn move_up(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         }
-        UpdateEvent::Redraw
     }
 
-    fn move_down(&mut self) -> UpdateEvent {
+    fn move_down(&mut self) {
         if self.selected + 1 < self.rss_config.feeds().len() {
             self.selected += 1;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         }
-        UpdateEvent::Redraw
     }
 
-    fn remove_selected(&mut self) -> UpdateEvent {
+    fn remove_selected(&mut self) {
         let url = self
             .rss_config
             .feeds()
@@ -81,10 +80,9 @@ impl RssConfigView {
             }
             let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
-        UpdateEvent::None
     }
 
-    fn add_url(&self, url: String) -> UpdateEvent {
+    fn add_url(&self, url: String) {
         {
             let mut loading_indicator = self.loading_indicator.lock();
             *loading_indicator = Some(LoadingIndicator::new(self.program_sender.clone()));
@@ -108,7 +106,6 @@ impl RssConfigView {
 
             let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
-        UpdateEvent::None
     }
 
     fn create_list(&self) -> List<'_> {
@@ -158,7 +155,7 @@ impl Component for RssConfigView {
         }
     }
 
-    fn handle_event(&mut self, event: Event) -> UpdateEvent {
+    fn handle_event(&mut self, event: Event) {
         if *self.error.lock() {
             if let Event::Key(KeyEvent {
                 code: KeyCode::Esc, ..
@@ -166,9 +163,7 @@ impl Component for RssConfigView {
             {
                 let mut error = self.error.lock();
                 *error = false;
-                UpdateEvent::Redraw
-            } else {
-                UpdateEvent::None
+                self.program_sender.send_sync(UpdateEvent::Redraw);
             }
         } else {
             match event {
@@ -179,10 +174,10 @@ impl Component for RssConfigView {
                     KeyCode::Down => self.move_down(),
                     KeyCode::Char('j') => self.move_down(),
                     KeyCode::Char('k') => self.move_up(),
-                    _ => UpdateEvent::None,
+                    _ => (),
                 },
                 Event::Paste(url) => self.add_url(url),
-                _ => UpdateEvent::None,
+                _ => (),
             }
         }
     }

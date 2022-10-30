@@ -46,7 +46,12 @@ impl App {
         let last_played_timestamp = common_config.config().last_played_timestamp;
         let (app_sender, app_receiver) = mpsc::channel(100);
 
-        let feed = FeedView::new(app_sender.clone(), videos, last_played_timestamp);
+        let feed = FeedView::new(
+            program_sender.clone(),
+            app_sender.clone(),
+            videos,
+            last_played_timestamp,
+        );
         let new_app = Self {
             show_config: Arc::new(Mutex::new(false)),
             playing: Arc::new(Mutex::new(false)),
@@ -116,10 +121,10 @@ impl App {
         });
     }
 
-    fn set_show_config(&mut self) -> UpdateEvent {
+    fn set_show_config(&mut self) {
         let mut show_config = self.show_config.lock();
         *show_config = true;
-        UpdateEvent::Redraw
+        self.program_sender.send_sync(UpdateEvent::Redraw);
     }
 }
 
@@ -152,35 +157,34 @@ impl Component for App {
         feed.draw(f, chunks[1]);
     }
 
-    fn handle_event(&mut self, event: Event) -> UpdateEvent {
+    fn handle_event(&mut self, event: Event) {
         {
             let mut playing = self.playing.lock();
             if *playing {
-                return if let Event::Key(KeyEvent {
+                if let Event::Key(KeyEvent {
                     code: KeyCode::Esc, ..
                 }) = event
                 {
                     *playing = false;
-                    UpdateEvent::Redraw
-                } else {
-                    UpdateEvent::None
-                };
+                    self.program_sender.send_sync(UpdateEvent::Redraw);
+                }
+                return;
             }
         }
 
         if let Event::Key(event) = event {
             match event.code {
-                KeyCode::Char('q') => return UpdateEvent::Quit,
-                KeyCode::Char('s') => return self.set_show_config(),
+                KeyCode::Char('q') => return self.program_sender.send_sync(UpdateEvent::Quit),
+                KeyCode::Char('c') => return self.set_show_config(),
                 _ => (),
             }
         }
 
         if *self.show_config.lock() {
-            self.config.handle_event(event)
+            self.config.handle_event(event);
         } else {
             let mut feed = self.feed.lock();
-            feed.handle_event(event)
+            feed.handle_event(event);
         }
     }
 }
