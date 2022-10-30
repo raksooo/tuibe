@@ -1,13 +1,14 @@
 use super::{
     component::{Component, Frame, UpdateEvent},
     config_provider::ConfigProviderMsg,
+    dialog::Dialog,
     feed_view::FeedView,
 };
 use crate::{
     config::{common::CommonConfigHandler, config::Video},
     sender_ext::SenderExt,
 };
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::{process::Stdio, sync::Arc};
 use tokio::{process::Command, sync::mpsc};
@@ -20,6 +21,7 @@ pub enum AppMsg {
 
 pub struct App {
     show_config: Arc<Mutex<bool>>,
+    playing: Arc<Mutex<bool>>,
 
     feed: Arc<Mutex<FeedView>>,
     common_config: Arc<CommonConfigHandler>,
@@ -47,6 +49,7 @@ impl App {
         let feed = FeedView::new(app_sender.clone(), videos, last_played_timestamp);
         let new_app = Self {
             show_config: Arc::new(Mutex::new(false)),
+            playing: Arc::new(Mutex::new(false)),
 
             feed: Arc::new(Mutex::new(feed)),
             common_config: Arc::new(common_config),
@@ -64,6 +67,7 @@ impl App {
     fn listen_app_msg(&self, mut app_receiver: mpsc::Receiver<AppMsg>) {
         let feed = Arc::clone(&self.feed);
         let show_config = Arc::clone(&self.show_config);
+        let playing = Arc::clone(&self.playing);
         let common_config = Arc::clone(&self.common_config);
         let program_sender = self.program_sender.clone();
         let config_sender = self.config_sender.clone();
@@ -83,6 +87,8 @@ impl App {
                                 {
                                     let mut feed = feed.lock();
                                     feed.update_last_played_timestamp(new_timestamp);
+                                    let mut playing = playing.lock();
+                                    *playing = true;
                                 }
                                 let _ = program_sender.send(UpdateEvent::Redraw).await;
 
@@ -94,6 +100,12 @@ impl App {
                                     .status()
                                     .await
                                     .unwrap();
+
+                                {
+                                    let mut playing = playing.lock();
+                                    *playing = false;
+                                }
+                                let _ = program_sender.send(UpdateEvent::Redraw).await;
                             }
                         }
                     }
@@ -113,8 +125,8 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let show_config = { self.show_config.lock().to_owned() };
-        let config_numerator = if show_config { 1 } else { 0 };
+        let show_config = self.show_config.lock();
+        let config_numerator = if *show_config { 1 } else { 0 };
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -127,8 +139,13 @@ impl Component for App {
             )
             .split(area);
 
-        if show_config {
+        if *show_config {
             self.config.draw(f, chunks[0]);
+        }
+
+        let playing = self.playing.lock();
+        if *playing {
+            Dialog::new("Playing selection.").draw(f, area);
         }
 
         let mut feed = self.feed.lock();
@@ -136,6 +153,21 @@ impl Component for App {
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {
+        {
+            let mut playing = self.playing.lock();
+            if *playing {
+                return if let Event::Key(KeyEvent {
+                    code: KeyCode::Esc, ..
+                }) = event
+                {
+                    *playing = false;
+                    UpdateEvent::Redraw
+                } else {
+                    UpdateEvent::None
+                };
+            }
+        }
+
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Char('q') => return UpdateEvent::Quit,
