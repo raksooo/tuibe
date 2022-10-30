@@ -17,7 +17,7 @@ pub struct LoadingIndicator {
 impl LoadingIndicator {
     pub fn new(program_sender: EventSender) -> Self {
         let dots = Arc::new(Mutex::new(0));
-        let dialog = Dialog::new(&Self::format_text(0));
+        let dialog = Dialog::new(&Self::format_text(0), None);
         let dots_async = Arc::clone(&dots);
         let handle = tokio::spawn(async move {
             Delay::new(Duration::from_millis(500)).await;
@@ -39,7 +39,7 @@ impl LoadingIndicator {
     fn before_draw(&mut self) {
         let dots = self.dots.lock();
         let text = Self::format_text(*dots);
-        self.dialog.update_text(&text);
+        self.dialog.update_text(&text, None);
     }
 
     fn format_text(dots: usize) -> String {

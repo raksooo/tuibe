@@ -180,7 +180,7 @@ impl Component for FeedView {
         f.render_widget(description, description_area);
 
         if *self.playing.lock() {
-            Dialog::new("Playing selection.").draw(f, area);
+            Dialog::new("Playing selection.", None).draw(f, area);
         }
     }
 

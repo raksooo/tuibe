@@ -8,7 +8,7 @@ pub enum ConfigError {
     #[error(display = "Failed to read config file")]
     ReadConfigFile,
 
-    #[error(display = "Failed to parse config file: {:?}", error)]
+    #[error(display = "Failed to parse config file: {}", error)]
     ParseConfigFile {
         #[error(from)]
         error: toml::de::Error,
@@ -26,7 +26,7 @@ pub enum ConfigError {
     #[error(display = "Failed to write to config file")]
     WriteConfigFile,
 
-    #[error(display = "Feed error: {:?}", error)]
+    #[error(display = "{}", error)]
     FeedError {
         #[error(from)]
         error: FeedError,
@@ -38,7 +38,7 @@ pub enum FeedError {
     #[error(display = "Failed to fetch RSS feed")]
     FetchFeed,
 
-    #[error(display = "Failed to read RSS feed: {:?}", error)]
+    #[error(display = "Failed to read RSS feed: {}", error)]
     ReadFeed { error: atom_syndication::Error },
 
     #[error(display = "Failed to parse video")]

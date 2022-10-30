@@ -59,8 +59,8 @@ impl Component for ErrorHandler {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         self.child.draw(f, area);
 
-        if self.error.lock().is_some() {
-            Dialog::new("Something went wrong..").draw(f, area);
+        if let Some(ref error) = *self.error.lock() {
+            Dialog::new("An error occured", Some(&error.message)).draw(f, area);
         }
     }
 
