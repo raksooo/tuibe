@@ -8,7 +8,7 @@ use crate::{
 };
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
-use std::{process::Stdio, sync::Arc};
+use std::{env, process::Stdio, sync::Arc};
 use tokio::{process::Command, sync::mpsc};
 use tui::{
     layout::Rect,
@@ -102,7 +102,7 @@ impl FeedView {
             }
             self.program_sender.send_sync(UpdateEvent::Redraw);
 
-            let player = self.common_config.config().player;
+            let player = self.get_player();
             let playing = Arc::clone(&self.playing);
             let program_sender = self.program_sender.clone();
             tokio::spawn(async move {
@@ -121,6 +121,13 @@ impl FeedView {
                 }
                 let _ = program_sender.send(UpdateEvent::Redraw).await;
             });
+        }
+    }
+
+    fn get_player(&self) -> String {
+        match env::args().skip_while(|arg| arg != "--player").nth(1) {
+            Some(player) => player,
+            None => self.common_config.config().player,
         }
     }
 
@@ -146,11 +153,11 @@ impl FeedView {
 
     fn create_description(&self) -> Paragraph<'_> {
         // current_item is always within the bounds of videos
-        let description = if let Some(video) = self.videos.get(self.current_item) {
-            video.video.description.to_owned()
-        } else {
-            "".to_string()
-        };
+        let description = self
+            .videos
+            .get(self.current_item)
+            .map(|video| video.video.description.to_owned())
+            .unwrap_or("".to_string());
 
         Paragraph::new(description)
             .block(Block::default().title("Description").borders(Borders::ALL))
