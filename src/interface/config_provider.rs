@@ -167,4 +167,10 @@ impl Component for ConfigProvider {
         let mut main_view = self.main_view.lock();
         main_view.handle_event(event);
     }
+
+    fn registered_events(&self) -> Vec<(String, String)> {
+        let mut events = vec![("r".to_string(), "Reload".to_string())];
+        events.append(&mut self.main_view.lock().registered_events());
+        events
+    }
 }

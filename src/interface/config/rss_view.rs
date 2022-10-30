@@ -166,4 +166,13 @@ impl Component for RssConfigView {
             _ => (),
         }
     }
+
+    fn registered_events(&self) -> Vec<(String, String)> {
+        vec![
+            ("Esc".to_string(), "Close".to_string()),
+            ("j".to_string(), "Down".to_string()),
+            ("k".to_string(), "Up".to_string()),
+            ("Paste".to_string(), "Add feed".to_string()),
+        ]
+    }
 }

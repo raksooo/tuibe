@@ -118,4 +118,14 @@ impl Component for MainView {
             }
         }
     }
+
+    fn registered_events(&self) -> Vec<(String, String)> {
+        if *self.show_config.lock() {
+            self.config.registered_events()
+        } else {
+            let mut events = vec![("c".to_string(), "Configure".to_string())];
+            events.append(&mut self.feed.registered_events());
+            events
+        }
+    }
 }

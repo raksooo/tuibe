@@ -7,15 +7,8 @@ pub type Frame<'a> = TuiFrame<'a, Backend>;
 
 #[derive(Debug)]
 pub enum UpdateEvent {
-    None,
     Redraw,
     Quit,
-}
-
-impl Default for UpdateEvent {
-    fn default() -> UpdateEvent {
-        UpdateEvent::None
-    }
 }
 
 pub type EventSender = mpsc::Sender<UpdateEvent>;
@@ -23,4 +16,7 @@ pub type EventSender = mpsc::Sender<UpdateEvent>;
 pub trait Component {
     fn draw(&mut self, f: &mut Frame, area: Rect);
     fn handle_event(&mut self, _event: Event) {}
+    fn registered_events(&self) -> Vec<(String, String)> {
+        vec![]
+    }
 }

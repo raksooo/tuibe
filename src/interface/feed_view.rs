@@ -217,4 +217,17 @@ impl Component for FeedView {
             }
         }
     }
+
+    fn registered_events(&self) -> Vec<(String, String)> {
+        if self.is_playing() {
+            vec![("Esc".to_string(), "Close".to_string())]
+        } else {
+            vec![
+                ("j".to_string(), "Down".to_string()),
+                ("k".to_string(), "Up".to_string()),
+                ("Space".to_string(), "Select".to_string()),
+                ("p".to_string(), "Play".to_string()),
+            ]
+        }
+    }
 }

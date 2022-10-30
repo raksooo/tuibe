@@ -75,6 +75,19 @@ impl Component for ErrorHandler {
             self.child.handle_event(event);
         }
     }
+
+    fn registered_events(&self) -> Vec<(String, String)> {
+        let error = self.error.lock();
+        if let Some(ErrorMsg { ignorable, .. }) = *error {
+            if ignorable {
+                vec![("Esc".to_string(), "Close".to_string())]
+            } else {
+                vec![]
+            }
+        } else {
+            self.child.registered_events()
+        }
+    }
 }
 
 #[async_trait]

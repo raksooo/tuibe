@@ -35,8 +35,7 @@ impl Component for Dialog {
 
             let dialog = Paragraph::new(body.clone())
                 .block(block)
-                .style(Style::default().fg(Color::White))
-                .alignment(Alignment::Center);
+                .style(Style::default().fg(Color::White));
 
             let area = Rect::new((area.width / 2) - 20, (area.height / 2) - 3, 40, 6);
 

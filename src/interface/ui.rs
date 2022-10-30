@@ -1,8 +1,6 @@
 use super::component::{Backend, Component, EventSender, UpdateEvent};
 use crossterm::event::{Event, EventStream};
-use futures_timer::Delay;
 use std::io;
-use std::time::Duration;
 use tokio::{select, sync::mpsc};
 use tokio_stream::StreamExt;
 use tui::Terminal;
@@ -28,12 +26,9 @@ where
                     match event {
                         UpdateEvent::Redraw => perform_draw(terminal, &mut root),
                         UpdateEvent::Quit => break,
-                        UpdateEvent::None => (),
                     }
                 }
             },
-            // TODO: Remove (helpful if event are broken)
-            _ = Delay::new(Duration::from_millis(20000)) => break,
         };
     }
 }
