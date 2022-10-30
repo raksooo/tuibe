@@ -1,7 +1,7 @@
 use crate::{
     config::rss::RssConfigHandler,
     interface::{
-        component::{Component, EventSender, Frame, UpdateEvent},
+        component::{Component, Frame, UpdateEvent},
         error_handler::{ErrorMsg, ErrorSenderExt},
         loading_indicator::LoadingIndicator,
         main_view::MainViewMsg,
@@ -11,7 +11,7 @@ use crate::{
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -19,9 +19,9 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    program_sender: EventSender,
-    error_sender: mpsc::Sender<ErrorMsg>,
-    main_sender: mpsc::Sender<MainViewMsg>,
+    program_sender: Sender<UpdateEvent>,
+    error_sender: Sender<ErrorMsg>,
+    main_sender: Sender<MainViewMsg>,
     rss_config: RssConfigHandler,
     selected: usize,
     loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
@@ -29,9 +29,9 @@ pub struct RssConfigView {
 
 impl RssConfigView {
     pub fn new(
-        program_sender: EventSender,
-        error_sender: mpsc::Sender<ErrorMsg>,
-        main_sender: mpsc::Sender<MainViewMsg>,
+        program_sender: Sender<UpdateEvent>,
+        error_sender: Sender<ErrorMsg>,
+        main_sender: Sender<MainViewMsg>,
         rss_config: RssConfigHandler,
     ) -> Self {
         Self {

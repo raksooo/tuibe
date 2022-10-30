@@ -1,5 +1,4 @@
 use crossterm::event::Event;
-use tokio::sync::mpsc;
 use tui::{backend::CrosstermBackend, layout::Rect, Frame as TuiFrame};
 
 pub type Backend = CrosstermBackend<std::io::Stdout>;
@@ -10,8 +9,6 @@ pub enum UpdateEvent {
     Redraw,
     Quit,
 }
-
-pub type EventSender = mpsc::Sender<UpdateEvent>;
 
 pub trait Component {
     fn draw(&mut self, f: &mut Frame, area: Rect);

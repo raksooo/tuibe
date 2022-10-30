@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, EventSender, Frame, UpdateEvent},
+    component::{Component, Frame, UpdateEvent},
     config::rss_view::RssConfigView,
     error_handler::{ErrorMsg, ErrorSenderExt},
     loading_indicator::LoadingIndicator,
@@ -11,7 +11,10 @@ use crate::config::{
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    mpsc::{Receiver, Sender},
+};
 use tui::layout::Rect;
 
 #[derive(Debug)]
@@ -20,14 +23,14 @@ pub enum ConfigProviderMsg {
 }
 
 pub struct ConfigProvider {
-    program_sender: EventSender,
-    error_sender: mpsc::Sender<ErrorMsg>,
-    config_sender: mpsc::Sender<ConfigProviderMsg>,
+    program_sender: Sender<UpdateEvent>,
+    error_sender: Sender<ErrorMsg>,
+    config_sender: Sender<ConfigProviderMsg>,
     main_view: Arc<Mutex<Box<dyn Component + Send>>>,
 }
 
 impl ConfigProvider {
-    pub fn new(program_sender: EventSender, error_sender: mpsc::Sender<ErrorMsg>) -> Self {
+    pub fn new(program_sender: Sender<UpdateEvent>, error_sender: Sender<ErrorMsg>) -> Self {
         let (config_sender, config_receiver) = mpsc::channel(100);
 
         let mut config_provider = Self {
@@ -44,7 +47,7 @@ impl ConfigProvider {
         config_provider
     }
 
-    fn listen_config_msg(&self, mut config_receiver: mpsc::Receiver<ConfigProviderMsg>) {
+    fn listen_config_msg(&self, mut config_receiver: Receiver<ConfigProviderMsg>) {
         let program_sender = self.program_sender.clone();
         let error_sender = self.error_sender.clone();
         let config_sender = self.config_sender.clone();
@@ -86,9 +89,9 @@ impl ConfigProvider {
     }
 
     async fn init_configs_impl(
-        program_sender: EventSender,
-        error_sender: mpsc::Sender<ErrorMsg>,
-        config_sender: mpsc::Sender<ConfigProviderMsg>,
+        program_sender: Sender<UpdateEvent>,
+        error_sender: Sender<ErrorMsg>,
+        config_sender: Sender<ConfigProviderMsg>,
         main_view: Arc<Mutex<Box<dyn Component + Send>>>,
     ) {
         error_sender.clone().run_or_send(
@@ -119,9 +122,9 @@ impl ConfigProvider {
     }
 
     async fn reload(
-        program_sender: EventSender,
-        error_sender: mpsc::Sender<ErrorMsg>,
-        config_sender: mpsc::Sender<ConfigProviderMsg>,
+        program_sender: Sender<UpdateEvent>,
+        error_sender: Sender<ErrorMsg>,
+        config_sender: Sender<ConfigProviderMsg>,
         main_view: Arc<Mutex<Box<dyn Component + Send>>>,
     ) {
         {

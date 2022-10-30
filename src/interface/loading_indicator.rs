@@ -1,11 +1,11 @@
 use super::{
-    component::{Component, EventSender, Frame, UpdateEvent},
+    component::{Component, Frame, UpdateEvent},
     dialog::Dialog,
 };
 use futures_timer::Delay;
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tui::layout::Rect;
 
 pub struct LoadingIndicator {
@@ -15,7 +15,7 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
-    pub fn new(program_sender: EventSender) -> Self {
+    pub fn new(program_sender: Sender<UpdateEvent>) -> Self {
         let dots = Arc::new(Mutex::new(0));
         let dialog = Dialog::new(&Self::format_text(0), None);
         let dots_async = Arc::clone(&dots);

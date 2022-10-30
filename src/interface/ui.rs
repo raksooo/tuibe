@@ -1,14 +1,17 @@
-use super::component::{Backend, Component, EventSender, UpdateEvent};
+use super::component::{Backend, Component, UpdateEvent};
 use crossterm::event::{Event, EventStream};
 use std::io;
-use tokio::{select, sync::mpsc};
+use tokio::{
+    select,
+    sync::{mpsc, mpsc::Sender},
+};
 use tokio_stream::StreamExt;
 use tui::Terminal;
 
 pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F)
 where
     C: Component,
-    F: FnOnce(EventSender) -> C,
+    F: FnOnce(Sender<UpdateEvent>) -> C,
 {
     let mut event_reader = EventStream::new();
     let (program_sender, mut program_receiver) = mpsc::channel(100);
