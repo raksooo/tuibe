@@ -1,6 +1,7 @@
 use super::{
     component::{Component, Frame, UpdateEvent},
     dialog::Dialog,
+    error_handler::{ErrorMsg, ErrorSenderExt},
 };
 use crate::{
     config::{common::CommonConfigHandler, config::Video},
@@ -23,6 +24,7 @@ struct VideoListItem {
 
 pub struct FeedView {
     program_sender: mpsc::Sender<UpdateEvent>,
+    error_sender: mpsc::Sender<ErrorMsg>,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
     videos: Vec<VideoListItem>,
@@ -32,6 +34,7 @@ pub struct FeedView {
 impl FeedView {
     pub fn new(
         program_sender: mpsc::Sender<UpdateEvent>,
+        error_sender: mpsc::Sender<ErrorMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
     ) -> Self {
@@ -46,6 +49,7 @@ impl FeedView {
 
         Self {
             program_sender,
+            error_sender,
             common_config: Arc::new(common_config),
             playing: Arc::new(Mutex::new(false)),
             videos,
@@ -105,21 +109,25 @@ impl FeedView {
             let player = self.get_player();
             let playing = Arc::clone(&self.playing);
             let program_sender = self.program_sender.clone();
+            let error_sender = self.error_sender.clone();
             tokio::spawn(async move {
                 let videos = selected_videos.iter().map(|video| video.url.clone());
-                Command::new(player)
+                let play_result = Command::new(player)
                     .args(videos)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .status()
-                    .await
-                    .unwrap();
+                    .await;
 
-                {
-                    let mut playing = playing.lock();
-                    *playing = false;
-                }
-                let _ = program_sender.send(UpdateEvent::Redraw).await;
+                error_sender
+                    .run_or_send_async(play_result, true, |_| async {
+                        {
+                            let mut playing = playing.lock();
+                            *playing = false;
+                        }
+                        let _ = program_sender.send(UpdateEvent::Redraw).await;
+                    })
+                    .await;
             });
         }
     }

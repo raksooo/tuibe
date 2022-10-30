@@ -98,6 +98,7 @@ impl ConfigProvider {
                 let mut main_view = main_view.lock();
                 *main_view = Box::new(MainView::new(
                     program_sender.clone(),
+                    error_sender.clone(),
                     config_sender,
                     common_config,
                     config.videos(),

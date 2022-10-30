@@ -1,6 +1,7 @@
 use super::{
     component::{Component, Frame, UpdateEvent},
     config_provider::ConfigProviderMsg,
+    error_handler::ErrorMsg,
     feed_view::FeedView,
 };
 use crate::{
@@ -30,6 +31,7 @@ pub struct MainView {
 impl MainView {
     pub fn new<C, CF>(
         program_sender: mpsc::Sender<UpdateEvent>,
+        error_sender: mpsc::Sender<ErrorMsg>,
         config_sender: mpsc::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
@@ -44,7 +46,7 @@ impl MainView {
         let new_main_view = Self {
             show_config: Arc::new(Mutex::new(false)),
 
-            feed: FeedView::new(program_sender.clone(), common_config, videos),
+            feed: FeedView::new(program_sender.clone(), error_sender, common_config, videos),
             config: Box::new(config_creator(main_sender)),
 
             program_sender,
