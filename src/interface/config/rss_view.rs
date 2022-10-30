@@ -1,10 +1,10 @@
 use crate::{
     config::rss::RssConfigHandler,
     interface::{
-        main_view::MainViewMsg,
         component::{Component, EventSender, Frame, UpdateEvent},
         dialog::Dialog,
         loading_indicator::LoadingIndicator,
+        main_view::MainViewMsg,
     },
     sender_ext::SenderExt,
 };

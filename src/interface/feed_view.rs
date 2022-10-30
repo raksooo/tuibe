@@ -1,10 +1,15 @@
 use super::{
-    main_view::MainViewMsg,
     component::{Component, Frame, UpdateEvent},
+    dialog::Dialog,
 };
-use crate::{config::config::Video, sender_ext::SenderExt};
-use crossterm::event::{Event, KeyCode};
-use tokio::sync::mpsc;
+use crate::{
+    config::{common::CommonConfigHandler, config::Video},
+    sender_ext::SenderExt,
+};
+use crossterm::event::{Event, KeyCode, KeyEvent};
+use parking_lot::Mutex;
+use std::{process::Stdio, sync::Arc};
+use tokio::{process::Command, sync::mpsc};
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -18,8 +23,8 @@ struct VideoListItem {
 
 pub struct FeedView {
     program_sender: mpsc::Sender<UpdateEvent>,
-    main_sender: mpsc::Sender<MainViewMsg>,
-
+    common_config: Arc<CommonConfigHandler>,
+    playing: Arc<Mutex<bool>>,
     videos: Vec<VideoListItem>,
     current_item: usize,
 }
@@ -27,10 +32,10 @@ pub struct FeedView {
 impl FeedView {
     pub fn new(
         program_sender: mpsc::Sender<UpdateEvent>,
-        main_sender: mpsc::Sender<MainViewMsg>,
+        common_config: CommonConfigHandler,
         videos: Vec<Video>,
-        last_played_timestamp: i64,
     ) -> Self {
+        let last_played_timestamp = common_config.config().last_played_timestamp;
         let videos = videos
             .iter()
             .map(|video| VideoListItem {
@@ -41,15 +46,10 @@ impl FeedView {
 
         Self {
             program_sender,
-            main_sender,
+            common_config: Arc::new(common_config),
+            playing: Arc::new(Mutex::new(false)),
             videos,
             current_item: 0,
-        }
-    }
-
-    pub fn update_last_played_timestamp(&mut self, last_played_timestamp: i64) {
-        for mut video in self.videos.iter_mut() {
-            video.selected = video.video.date.timestamp() > last_played_timestamp;
         }
     }
 
@@ -74,14 +74,54 @@ impl FeedView {
         }
     }
 
-    fn play(&self) {
-        let selected_videos = self
+    fn update_last_played_timestamp(&mut self, last_played_timestamp: i64) {
+        for mut video in self.videos.iter_mut() {
+            video.selected = video.video.date.timestamp() > last_played_timestamp;
+        }
+        let common_config = Arc::clone(&self.common_config);
+        tokio::spawn(async move {
+            common_config
+                .set_last_played_timestamp(last_played_timestamp)
+                .await;
+        });
+    }
+
+    fn play(&mut self) {
+        let selected_videos: Vec<Video> = self
             .videos
             .iter()
             .filter(|video| video.selected)
-            .map(|video| video.video.clone());
-        self.main_sender
-            .send_sync(MainViewMsg::Play(selected_videos.collect()));
+            .map(|video| video.video.clone())
+            .collect();
+
+        if let Some(newest_video) = selected_videos.get(0) {
+            self.update_last_played_timestamp(newest_video.date.timestamp());
+            {
+                let mut playing = self.playing.lock();
+                *playing = true;
+            }
+            self.program_sender.send_sync(UpdateEvent::Redraw);
+
+            let player = self.common_config.config().player;
+            let playing = Arc::clone(&self.playing);
+            let program_sender = self.program_sender.clone();
+            tokio::spawn(async move {
+                let videos = selected_videos.iter().map(|video| video.url.clone());
+                Command::new(player)
+                    .args(videos)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .await
+                    .unwrap();
+
+                {
+                    let mut playing = playing.lock();
+                    *playing = false;
+                }
+                let _ = program_sender.send(UpdateEvent::Redraw).await;
+            });
+        }
     }
 
     fn create_list(&self, width: usize) -> List<'_> {
@@ -131,9 +171,27 @@ impl Component for FeedView {
 
         f.render_widget(list, list_area);
         f.render_widget(description, description_area);
+
+        if *self.playing.lock() {
+            Dialog::new("Playing selection.").draw(f, area);
+        }
     }
 
     fn handle_event(&mut self, event: Event) {
+        {
+            let mut playing = self.playing.lock();
+            if *playing {
+                if let Event::Key(KeyEvent {
+                    code: KeyCode::Esc, ..
+                }) = event
+                {
+                    *playing = false;
+                    self.program_sender.send_sync(UpdateEvent::Redraw);
+                }
+                return;
+            }
+        }
+
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Up => self.move_up(),

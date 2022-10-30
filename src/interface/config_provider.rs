@@ -1,9 +1,9 @@
 use super::{
-    main_view::MainView,
     component::{Component, EventSender, Frame, UpdateEvent},
     config::rss_view::RssConfigView,
     dialog::Dialog,
     loading_indicator::LoadingIndicator,
+    main_view::MainView,
 };
 use crate::config::{
     common::CommonConfigHandler, config::Config, error::ConfigError, rss::RssConfigHandler,
