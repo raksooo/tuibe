@@ -139,6 +139,10 @@ impl FeedView {
         }
     }
 
+    fn is_playing(&self) -> bool {
+        self.playing.lock().clone()
+    }
+
     fn create_list(&self, width: usize) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
 
@@ -193,29 +197,23 @@ impl Component for FeedView {
     }
 
     fn handle_event(&mut self, event: Event) {
-        {
-            let mut playing = self.playing.lock();
-            if *playing {
-                if let Event::Key(KeyEvent {
-                    code: KeyCode::Esc, ..
-                }) = event
-                {
-                    *playing = false;
-                    self.program_sender.send_sync(UpdateEvent::Redraw);
-                }
-                return;
+        if self.is_playing() {
+            if event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
+                let mut playing = self.playing.lock();
+                *playing = false;
+                self.program_sender.send_sync(UpdateEvent::Redraw);
             }
-        }
-
-        if let Event::Key(event) = event {
-            match event.code {
-                KeyCode::Up => self.move_up(),
-                KeyCode::Down => self.move_down(),
-                KeyCode::Char('j') => self.move_down(),
-                KeyCode::Char('k') => self.move_up(),
-                KeyCode::Char(' ') => self.toggle_current_item(),
-                KeyCode::Char('p') => self.play(),
-                _ => (),
+        } else {
+            if let Event::Key(event) = event {
+                match event.code {
+                    KeyCode::Up => self.move_up(),
+                    KeyCode::Down => self.move_down(),
+                    KeyCode::Char('j') => self.move_down(),
+                    KeyCode::Char('k') => self.move_up(),
+                    KeyCode::Char(' ') => self.toggle_current_item(),
+                    KeyCode::Char('p') => self.play(),
+                    _ => (),
+                }
             }
         }
     }

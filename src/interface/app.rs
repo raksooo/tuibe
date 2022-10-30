@@ -32,11 +32,7 @@ impl Component for App {
     }
 
     fn handle_event(&mut self, event: Event) {
-        if let Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            ..
-        }) = event
-        {
+        if event == Event::Key(KeyEvent::from(KeyCode::Char('q'))) {
             self.program_sender.send_sync(UpdateEvent::Quit);
         } else {
             self.error_handler.handle_event(event);

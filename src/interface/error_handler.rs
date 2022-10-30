@@ -67,20 +67,13 @@ impl Component for ErrorHandler {
     fn handle_event(&mut self, event: Event) {
         let mut error = self.error.lock();
         if let Some(ErrorMsg { ignorable, .. }) = *error {
-            if ignorable {
-                if let Event::Key(KeyEvent {
-                    code: KeyCode::Esc, ..
-                }) = event
-                {
-                    *error = None;
-                    return self.program_sender.send_sync(UpdateEvent::Redraw);
-                }
-            } else {
-                return;
+            if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
+                *error = None;
+                self.program_sender.send_sync(UpdateEvent::Redraw);
             }
+        } else {
+            self.child.handle_event(event);
         }
-
-        self.child.handle_event(event);
     }
 }
 

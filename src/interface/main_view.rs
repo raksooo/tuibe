@@ -108,16 +108,14 @@ impl Component for MainView {
     }
 
     fn handle_event(&mut self, event: Event) {
-        if let Event::Key(KeyEvent {
-            code: KeyCode::Char('c'),
-            ..
-        }) = event
-        {
-            self.set_show_config();
-        } else if *self.show_config.lock() {
+        if *self.show_config.lock() {
             self.config.handle_event(event);
         } else {
-            self.feed.handle_event(event);
+            if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
+                self.set_show_config();
+            } else {
+                self.feed.handle_event(event);
+            }
         }
     }
 }
