@@ -81,6 +81,7 @@ impl ConfigProvider {
     ) {
         let new_app: Box<dyn Component + Send> = match Self::load_configs().await {
             Ok((common_config, config)) => Box::new(App::new(
+                program_sender.clone(),
                 config_sender,
                 common_config,
                 config.videos(),

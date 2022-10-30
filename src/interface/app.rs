@@ -9,25 +9,29 @@ use crate::{
 };
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
-use std::sync::Arc;
-use tokio::sync::mpsc;
+use std::{process::Stdio, sync::Arc};
+use tokio::{process::Command, sync::mpsc};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub enum AppMsg {
     CloseConfig,
+    Play(Vec<Video>),
 }
 
 pub struct App {
     show_config: Arc<Mutex<bool>>,
 
-    feed: FeedView,
+    feed: Arc<Mutex<FeedView>>,
+    common_config: Arc<CommonConfigHandler>,
     config: Box<dyn Component + Send>,
 
+    program_sender: mpsc::Sender<UpdateEvent>,
     config_sender: mpsc::Sender<ConfigProviderMsg>,
 }
 
 impl App {
     pub fn new<C, CF>(
+        program_sender: mpsc::Sender<UpdateEvent>,
         config_sender: mpsc::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
@@ -40,12 +44,15 @@ impl App {
         let last_played_timestamp = common_config.config().last_played_timestamp;
         let (app_sender, app_receiver) = mpsc::channel(100);
 
+        let feed = FeedView::new(app_sender.clone(), videos, last_played_timestamp);
         let new_app = Self {
             show_config: Arc::new(Mutex::new(false)),
 
-            feed: FeedView::new(videos, last_played_timestamp),
+            feed: Arc::new(Mutex::new(feed)),
+            common_config: Arc::new(common_config),
             config: Box::new(config_creator(app_sender)),
 
+            program_sender,
             config_sender,
         };
 
@@ -55,7 +62,10 @@ impl App {
     }
 
     fn listen_app_msg(&self, mut app_receiver: mpsc::Receiver<AppMsg>) {
+        let feed = Arc::clone(&self.feed);
         let show_config = Arc::clone(&self.show_config);
+        let common_config = Arc::clone(&self.common_config);
+        let program_sender = self.program_sender.clone();
         let config_sender = self.config_sender.clone();
         tokio::spawn(async move {
             loop {
@@ -65,6 +75,26 @@ impl App {
                             let mut show_config = show_config.lock();
                             *show_config = false;
                             config_sender.send_sync(ConfigProviderMsg::Reload);
+                        }
+                        AppMsg::Play(videos) => {
+                            if let Some(newest_video) = videos.get(0) {
+                                let new_timestamp = newest_video.date.timestamp();
+                                common_config.set_last_played_timestamp(new_timestamp).await;
+                                {
+                                    let mut feed = feed.lock();
+                                    feed.update_last_played_timestamp(new_timestamp);
+                                }
+                                let _ = program_sender.send(UpdateEvent::Redraw).await;
+
+                                let videos = videos.iter().map(|video| video.url.clone());
+                                Command::new(common_config.config().player)
+                                    .args(videos)
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::null())
+                                    .status()
+                                    .await
+                                    .unwrap();
+                            }
                         }
                     }
                 } else {
@@ -101,7 +131,8 @@ impl Component for App {
             self.config.draw(f, chunks[0]);
         }
 
-        self.feed.draw(f, chunks[1]);
+        let mut feed = self.feed.lock();
+        feed.draw(f, chunks[1]);
     }
 
     fn handle_event(&mut self, event: Event) -> UpdateEvent {
@@ -116,7 +147,8 @@ impl Component for App {
         if *self.show_config.lock() {
             self.config.handle_event(event)
         } else {
-            self.feed.handle_event(event)
+            let mut feed = self.feed.lock();
+            feed.handle_event(event)
         }
     }
 }
