@@ -1,7 +1,7 @@
 use super::{
     component::{Component, EventSender, Frame, UpdateEvent},
     config::rss_view::RssConfigView,
-    error_handler::ErrorMsg,
+    error_handler::{ErrorMsg, ErrorSenderExt},
     loading_indicator::LoadingIndicator,
     main_view::MainView,
 };
@@ -91,23 +91,22 @@ impl ConfigProvider {
         config_sender: mpsc::Sender<ConfigProviderMsg>,
         main_view: Arc<Mutex<Box<dyn Component + Send>>>,
     ) {
-        if let Ok((common_config, config)) = Self::load_configs().await {
-            let mut main_view = main_view.lock();
-            *main_view = Box::new(MainView::new(
-                program_sender.clone(),
-                config_sender,
-                common_config,
-                config.videos(),
-                |main_sender| RssConfigView::new(program_sender, error_sender, main_sender, config),
-            ));
-        } else {
-            let _ = error_sender
-                .send(ErrorMsg {
-                    message: "Failed to load configs".to_string(),
-                    ignorable: false,
-                })
-                .await;
-        }
+        error_sender.clone().run_or_send(
+            Self::load_configs().await,
+            false,
+            move |(common_config, config)| {
+                let mut main_view = main_view.lock();
+                *main_view = Box::new(MainView::new(
+                    program_sender.clone(),
+                    config_sender,
+                    common_config,
+                    config.videos(),
+                    |main_sender| {
+                        RssConfigView::new(program_sender, error_sender, main_sender, config)
+                    },
+                ));
+            },
+        );
     }
 
     async fn load_configs() -> Result<(CommonConfigHandler, RssConfigHandler), ConfigError> {

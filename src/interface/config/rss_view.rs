@@ -2,7 +2,7 @@ use crate::{
     config::rss::RssConfigHandler,
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
-        error_handler::ErrorMsg,
+        error_handler::{ErrorMsg, ErrorSenderExt},
         loading_indicator::LoadingIndicator,
         main_view::MainViewMsg,
     },
@@ -75,13 +75,12 @@ impl RssConfigView {
         let program_sender = self.program_sender.clone();
         let error_sender = self.error_sender.clone();
         tokio::spawn(async move {
-            if let Err(_) = remove_receiver.await.unwrap() {
-                error_sender.send_sync(ErrorMsg {
-                    message: "Failed to remove feed".to_string(),
-                    ignorable: true,
-                });
-            }
-            let _ = program_sender.send(UpdateEvent::Redraw);
+            let remove_result = remove_receiver.await.unwrap();
+            error_sender
+                .run_or_send_async(remove_result, true, |_| async {
+                    let _ = program_sender.send(UpdateEvent::Redraw).await;
+                })
+                .await;
         });
     }
 
@@ -102,14 +101,12 @@ impl RssConfigView {
                 *loading_indicator = None;
             }
 
-            if let Err(_) = add_receiver.await.unwrap() {
-                error_sender.send_sync(ErrorMsg {
-                    message: "Failed to add feed".to_string(),
-                    ignorable: true,
-                });
-            }
-
-            let _ = program_sender.send(UpdateEvent::Redraw);
+            let add_result = add_receiver.await.unwrap();
+            error_sender
+                .run_or_send_async(add_result, true, |_| async {
+                    let _ = program_sender.send(UpdateEvent::Redraw).await;
+                })
+                .await;
         });
     }
 

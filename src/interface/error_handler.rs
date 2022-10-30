@@ -3,9 +3,10 @@ use super::{
     dialog::Dialog,
 };
 use crate::sender_ext::SenderExt;
+use async_trait::async_trait;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::{fmt::Display, future::Future, sync::Arc};
 use tokio::sync::mpsc;
 use tui::layout::Rect;
 
@@ -80,5 +81,61 @@ impl Component for ErrorHandler {
         }
 
         self.child.handle_event(event);
+    }
+}
+
+#[async_trait]
+pub trait ErrorSenderExt {
+    fn run_or_send<T, E, F>(&self, result: Result<T, E>, ignorable: bool, f: F)
+    where
+        T: Send,
+        E: Display,
+        F: FnOnce(T);
+
+    async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
+    where
+        T: Send,
+        E: Display + Send,
+        R: Future<Output = ()> + Send,
+        F: FnOnce(T) -> R + Send;
+}
+
+#[async_trait]
+impl ErrorSenderExt for mpsc::Sender<ErrorMsg> {
+    fn run_or_send<T, E, F>(&self, result: Result<T, E>, ignorable: bool, f: F)
+    where
+        T: Send,
+        E: Display,
+        F: FnOnce(T),
+    {
+        if result.is_ok() {
+            unsafe {
+                f(result.unwrap_unchecked());
+            }
+        } else {
+            unsafe {
+                let message = result.unwrap_err_unchecked().to_string();
+                self.send_sync(ErrorMsg { message, ignorable });
+            }
+        }
+    }
+
+    async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
+    where
+        T: Send,
+        E: Display + Send,
+        R: Future<Output = ()> + Send,
+        F: FnOnce(T) -> R + Send,
+    {
+        if result.is_ok() {
+            unsafe {
+                f(result.unwrap_unchecked()).await;
+            }
+        } else {
+            unsafe {
+                let message = result.unwrap_err_unchecked().to_string();
+                let _ = self.send(ErrorMsg { message, ignorable }).await;
+            }
+        }
     }
 }
