@@ -14,12 +14,12 @@ use std::{process::Stdio, sync::Arc};
 use tokio::{process::Command, sync::mpsc};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
-pub enum AppMsg {
+pub enum MainViewMsg {
     CloseConfig,
     Play(Vec<Video>),
 }
 
-pub struct App {
+pub struct MainView {
     show_config: Arc<Mutex<bool>>,
     playing: Arc<Mutex<bool>>,
 
@@ -31,7 +31,7 @@ pub struct App {
     config_sender: mpsc::Sender<ConfigProviderMsg>,
 }
 
-impl App {
+impl MainView {
     pub fn new<C, CF>(
         program_sender: mpsc::Sender<UpdateEvent>,
         config_sender: mpsc::Sender<ConfigProviderMsg>,
@@ -41,35 +41,35 @@ impl App {
     ) -> Self
     where
         C: Component + Send + 'static,
-        CF: FnOnce(mpsc::Sender<AppMsg>) -> C,
+        CF: FnOnce(mpsc::Sender<MainViewMsg>) -> C,
     {
         let last_played_timestamp = common_config.config().last_played_timestamp;
-        let (app_sender, app_receiver) = mpsc::channel(100);
+        let (main_sender, main_receiver) = mpsc::channel(100);
 
         let feed = FeedView::new(
             program_sender.clone(),
-            app_sender.clone(),
+            main_sender.clone(),
             videos,
             last_played_timestamp,
         );
-        let new_app = Self {
+        let new_main_view = Self {
             show_config: Arc::new(Mutex::new(false)),
             playing: Arc::new(Mutex::new(false)),
 
             feed: Arc::new(Mutex::new(feed)),
             common_config: Arc::new(common_config),
-            config: Box::new(config_creator(app_sender)),
+            config: Box::new(config_creator(main_sender)),
 
             program_sender,
             config_sender,
         };
 
-        new_app.listen_app_msg(app_receiver);
+        new_main_view.listen_main_view_msg(main_receiver);
 
-        new_app
+        new_main_view
     }
 
-    fn listen_app_msg(&self, mut app_receiver: mpsc::Receiver<AppMsg>) {
+    fn listen_main_view_msg(&self, mut main_receiver: mpsc::Receiver<MainViewMsg>) {
         let feed = Arc::clone(&self.feed);
         let show_config = Arc::clone(&self.show_config);
         let playing = Arc::clone(&self.playing);
@@ -78,14 +78,14 @@ impl App {
         let config_sender = self.config_sender.clone();
         tokio::spawn(async move {
             loop {
-                if let Some(msg) = app_receiver.recv().await {
+                if let Some(msg) = main_receiver.recv().await {
                     match msg {
-                        AppMsg::CloseConfig => {
+                        MainViewMsg::CloseConfig => {
                             let mut show_config = show_config.lock();
                             *show_config = false;
                             config_sender.send_sync(ConfigProviderMsg::Reload);
                         }
-                        AppMsg::Play(videos) => {
+                        MainViewMsg::Play(videos) => {
                             if let Some(newest_video) = videos.get(0) {
                                 let new_timestamp = newest_video.date.timestamp();
                                 common_config.set_last_played_timestamp(new_timestamp).await;
@@ -128,7 +128,7 @@ impl App {
     }
 }
 
-impl Component for App {
+impl Component for MainView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let show_config = self.show_config.lock();
         let config_numerator = if *show_config { 1 } else { 0 };

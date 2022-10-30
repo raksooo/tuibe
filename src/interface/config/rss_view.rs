@@ -1,7 +1,7 @@
 use crate::{
     config::rss::RssConfigHandler,
     interface::{
-        app::AppMsg,
+        main_view::MainViewMsg,
         component::{Component, EventSender, Frame, UpdateEvent},
         dialog::Dialog,
         loading_indicator::LoadingIndicator,
@@ -20,7 +20,7 @@ use tui::{
 
 pub struct RssConfigView {
     program_sender: EventSender,
-    app_sender: mpsc::Sender<AppMsg>,
+    main_sender: mpsc::Sender<MainViewMsg>,
     rss_config: RssConfigHandler,
     selected: usize,
     loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
@@ -30,12 +30,12 @@ pub struct RssConfigView {
 impl RssConfigView {
     pub fn new(
         program_sender: EventSender,
-        app_sender: mpsc::Sender<AppMsg>,
+        main_sender: mpsc::Sender<MainViewMsg>,
         rss_config: RssConfigHandler,
     ) -> Self {
         Self {
             program_sender,
-            app_sender,
+            main_sender,
             rss_config,
             selected: 0,
             loading_indicator: Arc::new(Mutex::new(None)),
@@ -44,7 +44,7 @@ impl RssConfigView {
     }
 
     fn close(&self) {
-        self.app_sender.send_sync(AppMsg::CloseConfig);
+        self.main_sender.send_sync(MainViewMsg::CloseConfig);
     }
 
     fn move_up(&mut self) {

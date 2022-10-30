@@ -1,5 +1,5 @@
 use super::{
-    app::App,
+    main_view::MainView,
     component::{Component, EventSender, Frame, UpdateEvent},
     config::rss_view::RssConfigView,
     dialog::Dialog,
@@ -22,7 +22,7 @@ pub enum ConfigProviderMsg {
 pub struct ConfigProvider {
     program_sender: EventSender,
     config_sender: mpsc::Sender<ConfigProviderMsg>,
-    app: Arc<Mutex<Box<dyn Component + Send>>>,
+    main_view: Arc<Mutex<Box<dyn Component + Send>>>,
 }
 
 impl ConfigProvider {
@@ -32,7 +32,7 @@ impl ConfigProvider {
         let mut config_provider = Self {
             program_sender: program_sender.clone(),
             config_sender,
-            app: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(
+            main_view: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(
                 program_sender.clone(),
             )))),
         };
@@ -45,7 +45,7 @@ impl ConfigProvider {
     fn listen_config_msg(&self, mut config_receiver: mpsc::Receiver<ConfigProviderMsg>) {
         let program_sender = self.program_sender.clone();
         let config_sender = self.config_sender.clone();
-        let app = Arc::clone(&self.app);
+        let main_view = Arc::clone(&self.main_view);
 
         tokio::spawn(async move {
             loop {
@@ -54,7 +54,7 @@ impl ConfigProvider {
                         Self::reload(
                             program_sender.clone(),
                             config_sender.clone(),
-                            Arc::clone(&app),
+                            Arc::clone(&main_view),
                         )
                         .await
                     }
@@ -66,10 +66,10 @@ impl ConfigProvider {
     fn init_configs(&mut self) {
         let program_sender = self.program_sender.clone();
         let config_sender = self.config_sender.clone();
-        let app = Arc::clone(&self.app);
+        let main_view = Arc::clone(&self.main_view);
 
         tokio::spawn(async move {
-            Self::init_configs_impl(program_sender.clone(), config_sender, app).await;
+            Self::init_configs_impl(program_sender.clone(), config_sender, main_view).await;
             let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
     }
@@ -77,22 +77,22 @@ impl ConfigProvider {
     async fn init_configs_impl(
         program_sender: EventSender,
         config_sender: mpsc::Sender<ConfigProviderMsg>,
-        app: Arc<Mutex<Box<dyn Component + Send>>>,
+        main_view: Arc<Mutex<Box<dyn Component + Send>>>,
     ) {
-        let new_app: Box<dyn Component + Send> = match Self::load_configs().await {
-            Ok((common_config, config)) => Box::new(App::new(
+        let new_main_view: Box<dyn Component + Send> = match Self::load_configs().await {
+            Ok((common_config, config)) => Box::new(MainView::new(
                 program_sender.clone(),
                 config_sender,
                 common_config,
                 config.videos(),
-                |app_sender| RssConfigView::new(program_sender, app_sender, config),
+                |main_sender| RssConfigView::new(program_sender, main_sender, config),
             )),
             Err(_) => Box::new(Dialog::new("Something went wrong..")),
         };
 
         {
-            let mut app = app.lock();
-            *app = new_app;
+            let mut main_view = main_view.lock();
+            *main_view = new_main_view;
         }
     }
 
@@ -107,18 +107,18 @@ impl ConfigProvider {
     async fn reload(
         program_sender: EventSender,
         config_sender: mpsc::Sender<ConfigProviderMsg>,
-        app: Arc<Mutex<Box<dyn Component + Send>>>,
+        main_view: Arc<Mutex<Box<dyn Component + Send>>>,
     ) {
         {
-            let mut app = app.lock();
-            *app = Box::new(LoadingIndicator::new(program_sender.clone()));
+            let mut main_view = main_view.lock();
+            *main_view = Box::new(LoadingIndicator::new(program_sender.clone()));
         }
         let _ = program_sender.send(UpdateEvent::Redraw).await;
 
         Self::init_configs_impl(
             program_sender.clone(),
             config_sender.clone(),
-            Arc::clone(&app),
+            Arc::clone(&main_view),
         )
         .await;
         let _ = program_sender.send(UpdateEvent::Redraw).await;
@@ -127,8 +127,8 @@ impl ConfigProvider {
 
 impl Component for ConfigProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut app = self.app.lock();
-        app.draw(f, area);
+        let mut main_view = self.main_view.lock();
+        main_view.draw(f, area);
     }
 
     fn handle_event(&mut self, event: Event) {
@@ -137,9 +137,9 @@ impl Component for ConfigProvider {
                 KeyCode::Char('r') => {
                     let program_sender = self.program_sender.clone();
                     let config_sender = self.config_sender.clone();
-                    let app = Arc::clone(&self.app);
+                    let main_view = Arc::clone(&self.main_view);
                     tokio::spawn(async move {
-                        Self::reload(program_sender, config_sender, app).await;
+                        Self::reload(program_sender, config_sender, main_view).await;
                     });
                     return;
                 }
@@ -147,7 +147,7 @@ impl Component for ConfigProvider {
             }
         }
 
-        let mut app = self.app.lock();
-        app.handle_event(event);
+        let mut main_view = self.main_view.lock();
+        main_view.handle_event(event);
     }
 }

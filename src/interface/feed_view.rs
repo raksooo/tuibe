@@ -1,5 +1,5 @@
 use super::{
-    app::AppMsg,
+    main_view::MainViewMsg,
     component::{Component, Frame, UpdateEvent},
 };
 use crate::{config::config::Video, sender_ext::SenderExt};
@@ -18,7 +18,7 @@ struct VideoListItem {
 
 pub struct FeedView {
     program_sender: mpsc::Sender<UpdateEvent>,
-    app_sender: mpsc::Sender<AppMsg>,
+    main_sender: mpsc::Sender<MainViewMsg>,
 
     videos: Vec<VideoListItem>,
     current_item: usize,
@@ -27,7 +27,7 @@ pub struct FeedView {
 impl FeedView {
     pub fn new(
         program_sender: mpsc::Sender<UpdateEvent>,
-        app_sender: mpsc::Sender<AppMsg>,
+        main_sender: mpsc::Sender<MainViewMsg>,
         videos: Vec<Video>,
         last_played_timestamp: i64,
     ) -> Self {
@@ -41,7 +41,7 @@ impl FeedView {
 
         Self {
             program_sender,
-            app_sender,
+            main_sender,
             videos,
             current_item: 0,
         }
@@ -80,8 +80,8 @@ impl FeedView {
             .iter()
             .filter(|video| video.selected)
             .map(|video| video.video.clone());
-        self.app_sender
-            .send_sync(AppMsg::Play(selected_videos.collect()));
+        self.main_sender
+            .send_sync(MainViewMsg::Play(selected_videos.collect()));
     }
 
     fn create_list(&self, width: usize) -> List<'_> {
