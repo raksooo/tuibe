@@ -7,7 +7,7 @@ use crate::{
     config::{common::CommonConfigHandler, config::Video},
     sender_ext::SenderExt,
 };
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -106,15 +106,13 @@ impl Component for MainView {
     }
 
     fn handle_event(&mut self, event: Event) {
-        if let Event::Key(event) = event {
-            match event.code {
-                KeyCode::Char('q') => return self.program_sender.send_sync(UpdateEvent::Quit),
-                KeyCode::Char('c') => return self.set_show_config(),
-                _ => (),
-            }
-        }
-
-        if *self.show_config.lock() {
+        if let Event::Key(KeyEvent {
+            code: KeyCode::Char('c'),
+            ..
+        }) = event
+        {
+            self.set_show_config();
+        } else if *self.show_config.lock() {
             self.config.handle_event(event);
         } else {
             self.feed.handle_event(event);

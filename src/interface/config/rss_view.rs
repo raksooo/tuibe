@@ -2,13 +2,13 @@ use crate::{
     config::rss::RssConfigHandler,
     interface::{
         component::{Component, EventSender, Frame, UpdateEvent},
-        dialog::Dialog,
+        error_handler::ErrorMsg,
         loading_indicator::LoadingIndicator,
         main_view::MainViewMsg,
     },
     sender_ext::SenderExt,
 };
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -20,26 +20,27 @@ use tui::{
 
 pub struct RssConfigView {
     program_sender: EventSender,
+    error_sender: mpsc::Sender<ErrorMsg>,
     main_sender: mpsc::Sender<MainViewMsg>,
     rss_config: RssConfigHandler,
     selected: usize,
     loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
-    error: Arc<Mutex<bool>>,
 }
 
 impl RssConfigView {
     pub fn new(
         program_sender: EventSender,
+        error_sender: mpsc::Sender<ErrorMsg>,
         main_sender: mpsc::Sender<MainViewMsg>,
         rss_config: RssConfigHandler,
     ) -> Self {
         Self {
             program_sender,
+            error_sender,
             main_sender,
             rss_config,
             selected: 0,
             loading_indicator: Arc::new(Mutex::new(None)),
-            error: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -72,13 +73,15 @@ impl RssConfigView {
 
         let remove_receiver = self.rss_config.remove_feed(url);
         let program_sender = self.program_sender.clone();
-        let error = Arc::clone(&self.error);
+        let error_sender = self.error_sender.clone();
         tokio::spawn(async move {
             if let Err(_) = remove_receiver.await.unwrap() {
-                let mut error = error.lock();
-                *error = true;
+                error_sender.send_sync(ErrorMsg {
+                    message: "Failed to remove feed".to_string(),
+                    ignorable: true,
+                });
             }
-            let _ = program_sender.send(UpdateEvent::Redraw).await;
+            let _ = program_sender.send(UpdateEvent::Redraw);
         });
     }
 
@@ -91,20 +94,22 @@ impl RssConfigView {
 
         let add_receiver = self.rss_config.add_feed(url);
         let program_sender = self.program_sender.clone();
-        let error = Arc::clone(&self.error);
+        let error_sender = self.error_sender.clone();
         let loading_indicator = Arc::clone(&self.loading_indicator);
         tokio::spawn(async move {
-            if let Err(_) = add_receiver.await.unwrap() {
-                let mut error = error.lock();
-                *error = true;
-            }
-
             {
                 let mut loading_indicator = loading_indicator.lock();
                 *loading_indicator = None;
             }
 
-            let _ = program_sender.send(UpdateEvent::Redraw).await;
+            if let Err(_) = add_receiver.await.unwrap() {
+                error_sender.send_sync(ErrorMsg {
+                    message: "Failed to add feed".to_string(),
+                    ignorable: true,
+                });
+            }
+
+            let _ = program_sender.send(UpdateEvent::Redraw);
         });
     }
 
@@ -144,41 +149,24 @@ impl Component for RssConfigView {
             .style(Style::default().fg(Color::White));
         f.render_widget(instruction, instruction_area);
 
-        let error = self.error.lock();
-        let mut loading_indicator = self.loading_indicator.lock();
-        if *error {
-            Dialog::new("Something went wrong..").draw(f, area);
-        } else {
-            if let Some(ref mut loading_indicator) = *loading_indicator {
-                loading_indicator.draw(f, area);
-            }
+        if let Some(ref mut loading_indicator) = *self.loading_indicator.lock() {
+            loading_indicator.draw(f, area);
         }
     }
 
     fn handle_event(&mut self, event: Event) {
-        if *self.error.lock() {
-            if let Event::Key(KeyEvent {
-                code: KeyCode::Esc, ..
-            }) = event
-            {
-                let mut error = self.error.lock();
-                *error = false;
-                self.program_sender.send_sync(UpdateEvent::Redraw);
-            }
-        } else {
-            match event {
-                Event::Key(event) => match event.code {
-                    KeyCode::Esc => self.close(),
-                    KeyCode::Char('d') => self.remove_selected(),
-                    KeyCode::Up => self.move_up(),
-                    KeyCode::Down => self.move_down(),
-                    KeyCode::Char('j') => self.move_down(),
-                    KeyCode::Char('k') => self.move_up(),
-                    _ => (),
-                },
-                Event::Paste(url) => self.add_url(url),
+        match event {
+            Event::Key(event) => match event.code {
+                KeyCode::Esc => self.close(),
+                KeyCode::Char('d') => self.remove_selected(),
+                KeyCode::Up => self.move_up(),
+                KeyCode::Down => self.move_down(),
+                KeyCode::Char('j') => self.move_down(),
+                KeyCode::Char('k') => self.move_up(),
                 _ => (),
-            }
+            },
+            Event::Paste(url) => self.add_url(url),
+            _ => (),
         }
     }
 }

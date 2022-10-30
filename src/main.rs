@@ -3,7 +3,7 @@ mod sender_ext;
 mod config;
 mod interface;
 
-use interface::{config_provider::ConfigProvider, ui};
+use interface::{app::App, ui};
 
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
@@ -22,10 +22,7 @@ async fn main() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::create(&mut terminal, |program_sender| {
-        ConfigProvider::new(program_sender)
-    })
-    .await;
+    ui::create(&mut terminal, |program_sender| App::new(program_sender)).await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(
