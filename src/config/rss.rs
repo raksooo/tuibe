@@ -60,7 +60,8 @@ impl RssConfigHandler {
             .split("\n")
             .skip(1)
             .map(|line| {
-                let channel_id = line.split(",")
+                let channel_id = line
+                    .split(",")
                     .nth(0)
                     .expect(&format!("Failed to import: {}", line));
                 format!(
@@ -126,11 +127,18 @@ impl RssConfigHandler {
     }
 
     async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, FeedError> {
+        use chrono::offset::Utc;
+
         let author = rss.title().as_str();
-        rss.entries()
+        let mut videos: Vec<Video> = rss
+            .entries()
             .iter()
             .map(|entry| Self::parse_video(entry, author))
-            .collect()
+            .collect::<Result<Vec<Video>, FeedError>>()?;
+
+        let now = Utc::now();
+        videos.retain(|video| now.years_since(video.date.into()).unwrap() < 1);
+        Ok(videos)
     }
 
     fn parse_video(entry: &Entry, author: &str) -> Result<Video, FeedError> {
