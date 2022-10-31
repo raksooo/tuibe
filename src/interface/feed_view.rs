@@ -64,6 +64,11 @@ impl FeedView {
         }
     }
 
+    fn move_top(&mut self) {
+        self.current_item = 0;
+        self.program_sender.send_sync(UpdateEvent::Redraw);
+    }
+
     fn move_down(&mut self) {
         if self.current_item + 1 < self.videos.len() {
             self.current_item += 1;
@@ -143,15 +148,26 @@ impl FeedView {
         self.playing.lock().clone()
     }
 
-    fn create_list(&self, width: usize) -> List<'_> {
+    fn create_list(&self, area: Rect) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
 
-        for (i, video) in self.videos.iter().enumerate() {
+        let height: usize = area.height.into();
+        let nvideos = self.videos.len();
+        let start_index = if self.current_item < height / 2 {
+            0
+        } else if self.current_item >= nvideos - height / 2 {
+            nvideos - height + 1
+        } else {
+            self.current_item - (height / 2)
+        };
+
+        for (i, video) in self.videos.iter().skip(start_index).enumerate() {
             let selected = if video.selected { "✓" } else { " " };
-            let label = video.video.get_label(width);
+            let width: usize = area.width.into();
+            let label = video.video.get_label(width - 2);
             let mut item = ListItem::new(format!("{selected} {label}"));
 
-            if i == self.current_item {
+            if i + start_index == self.current_item {
                 item = item.style(Style::default().fg(Color::Green));
             }
 
@@ -182,10 +198,10 @@ impl Component for FeedView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let description_height = 10;
         let description_y = area.height - description_height;
-        let list_area = Rect::new(area.x, 0, area.width, description_y - 10);
+        let list_area = Rect::new(area.x, 0, area.width, description_y - 1);
         let description_area = Rect::new(area.x, description_y, area.width, description_height);
 
-        let list = self.create_list(list_area.width.into());
+        let list = self.create_list(list_area);
         let description = self.create_description();
 
         f.render_widget(list, list_area);
@@ -210,6 +226,7 @@ impl Component for FeedView {
                     KeyCode::Down => self.move_down(),
                     KeyCode::Char('j') => self.move_down(),
                     KeyCode::Char('k') => self.move_up(),
+                    KeyCode::Char('g') => self.move_top(),
                     KeyCode::Char(' ') => self.toggle_current_item(),
                     KeyCode::Char('p') => self.play(),
                     _ => (),
@@ -225,6 +242,7 @@ impl Component for FeedView {
             vec![
                 ("j".to_string(), "Down".to_string()),
                 ("k".to_string(), "Up".to_string()),
+                ("g".to_string(), "Top".to_string()),
                 ("Space".to_string(), "Select".to_string()),
                 ("p".to_string(), "Play".to_string()),
             ]

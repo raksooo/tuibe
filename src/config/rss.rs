@@ -59,8 +59,15 @@ impl RssConfigHandler {
             .trim()
             .split("\n")
             .skip(1)
-            .map(|line| line.split(",").nth(0).expect(&format!("Failed to import: {}", line)))
-            .map(|channel_id| format!("https://www.youtube.com/feeds/videos.xml?channel_id={}", channel_id))
+            .map(|line| {
+                let channel_id = line.split(",")
+                    .nth(0)
+                    .expect(&format!("Failed to import: {}", line));
+                format!(
+                    "https://www.youtube.com/feeds/videos.xml?channel_id={}",
+                    channel_id
+                )
+            })
             .collect();
 
         let new_config = {
@@ -70,7 +77,10 @@ impl RssConfigHandler {
         };
 
         let file_handler = self.file_handler.lock().await;
-        file_handler.write(&new_config).await.expect("Failed to write to config file");
+        file_handler
+            .write(&new_config)
+            .await
+            .expect("Failed to write to config file");
 
         println!("Done.");
     }
@@ -227,7 +237,10 @@ impl Config for RssConfigHandler {
             for url in data.config.clone().feeds.iter() {
                 match Self::fetch_feed(url, &mut data).await {
                     Ok(_) => (),
-                    Err(ConfigError::FeedError { error: FeedError::ReadFeed { .. }, .. }) => (),
+                    Err(ConfigError::FeedError {
+                        error: FeedError::ReadFeed { .. },
+                        ..
+                    }) => (),
                     Err(error) => return Err(error),
                 };
             }

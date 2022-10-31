@@ -20,13 +20,15 @@ impl LoadingIndicator {
         let dialog = Dialog::new(&Self::format_text(0), None);
         let dots_async = Arc::clone(&dots);
         let handle = tokio::spawn(async move {
-            Delay::new(Duration::from_millis(500)).await;
-            {
-                let mut dots = dots_async.lock();
-                *dots += 1;
-                *dots %= 4;
+            loop {
+                Delay::new(Duration::from_millis(500)).await;
+                {
+                    let mut dots = dots_async.lock();
+                    *dots += 1;
+                    *dots %= 4;
+                }
+                let _ = program_sender.send(UpdateEvent::Redraw).await;
             }
-            let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
 
         Self {

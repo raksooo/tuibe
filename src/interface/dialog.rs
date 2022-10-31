@@ -2,7 +2,7 @@ use crate::interface::component::{Component, Frame};
 use tui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
 pub struct Dialog {
@@ -35,7 +35,8 @@ impl Component for Dialog {
 
             let dialog = Paragraph::new(body.clone())
                 .block(block)
-                .style(Style::default().fg(Color::White));
+                .style(Style::default().fg(Color::White))
+                .wrap(Wrap { trim: true });
 
             let area = Rect::new((area.width / 2) - 20, (area.height / 2) - 3, 40, 6);
 

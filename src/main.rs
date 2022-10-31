@@ -3,8 +3,8 @@ mod sender_ext;
 mod config;
 mod interface;
 
-use interface::{app::App, ui};
 use config::{config::Config, rss::RssConfigHandler};
+use interface::{app::App, ui};
 
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
@@ -15,7 +15,10 @@ use tui::{backend::CrosstermBackend, Terminal};
 
 #[tokio::main]
 async fn main() {
-    if let Some(path) = std::env::args().skip_while(|arg| arg != "--import-youtube").nth(1) {
+    if let Some(path) = std::env::args()
+        .skip_while(|arg| arg != "--import-youtube")
+        .nth(1)
+    {
         RssConfigHandler::load()
             .await
             .expect("Failed to load config")

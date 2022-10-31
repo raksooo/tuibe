@@ -55,6 +55,8 @@ impl Component for App {
     fn handle_event(&mut self, event: Event) {
         if event == Event::Key(KeyEvent::from(KeyCode::Char('q'))) {
             self.program_sender.send_sync(UpdateEvent::Quit);
+        } else if let Event::Resize(_, _) = event {
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         } else {
             self.error_handler.handle_event(event);
         }
