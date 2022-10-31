@@ -8,7 +8,7 @@ use atom_syndication::Entry;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, future::Future, sync::Arc};
-use tokio::sync::oneshot;
+use tokio::{fs, sync::oneshot};
 
 const CONFIG_NAME: &str = "rss";
 
@@ -48,6 +48,31 @@ impl RssConfigHandler {
             data.config.feeds.push(url);
             Ok(data)
         })
+    }
+
+    pub async fn import_youtube(&self, path: String) {
+        println!("Importing config...");
+        let content = fs::read_to_string(&path)
+            .await
+            .expect("Failed to read file");
+        let mut urls: Vec<String> = content
+            .trim()
+            .split("\n")
+            .skip(1)
+            .map(|line| line.split(",").nth(0).expect(&format!("Failed to import: {}", line)))
+            .map(|channel_id| format!("https://www.youtube.com/feeds/videos.xml?channel_id={}", channel_id))
+            .collect();
+
+        let new_config = {
+            let mut data = self.data.lock();
+            data.config.feeds.append(&mut urls);
+            data.config.clone()
+        };
+
+        let file_handler = self.file_handler.lock().await;
+        file_handler.write(&new_config).await.expect("Failed to write to config file");
+
+        println!("Done.");
     }
 
     pub fn remove_feed(&self, url: String) -> oneshot::Receiver<ConfigResult> {
@@ -200,7 +225,11 @@ impl Config for RssConfigHandler {
 
         self.modify(|mut data| async {
             for url in data.config.clone().feeds.iter() {
-                Self::fetch_feed(url, &mut data).await?;
+                match Self::fetch_feed(url, &mut data).await {
+                    Ok(_) => (),
+                    Err(ConfigError::FeedError { error: FeedError::ReadFeed { .. }, .. }) => (),
+                    Err(error) => return Err(error),
+                };
             }
 
             Ok(data)
