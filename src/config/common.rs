@@ -43,47 +43,28 @@ impl CommonConfigHandler {
         &self,
         last_played_timestamp: i64,
     ) -> oneshot::Receiver<Result<(), ConfigError>> {
-        self.modify(move |mut config| {
-            config.last_played_timestamp = last_played_timestamp;
-            config
-        })
-    }
-
-    pub fn config(&self) -> CommonConfig {
-        let config = self.config.lock();
-        config.clone()
-    }
-
-    fn modify<F>(&self, f: F) -> oneshot::Receiver<Result<(), ConfigError>>
-    where
-        F: FnOnce(CommonConfig) -> CommonConfig + Send + 'static,
-    {
         let (sender, receiver) = oneshot::channel();
         let config = Arc::clone(&self.config);
         let file_handler = Arc::clone(&self.file_handler);
 
         tokio::spawn(async move {
-            let new_data = Self::modify_impl(config, file_handler, f).await;
-            let _ = sender.send(new_data);
+            let new_config = {
+                let mut config = config.lock();
+                config.last_played_timestamp = last_played_timestamp;
+                config.clone()
+            };
+
+            let file_handler = file_handler.lock().await;
+            let result = file_handler.write(&new_config).await;
+
+            let _ = sender.send(result);
         });
 
         receiver
     }
 
-    async fn modify_impl<F>(
-        config: Arc<Mutex<CommonConfig>>,
-        file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler>>,
-        f: F,
-    ) -> Result<(), ConfigError>
-    where
-        F: FnOnce(CommonConfig) -> CommonConfig + Send + 'static,
-    {
-        let new_config = {
-            let config = config.lock();
-            f(config.clone())
-        };
-
-        let file_handler = file_handler.lock().await;
-        file_handler.write(&new_config).await
+    pub fn config(&self) -> CommonConfig {
+        let config = self.config.lock();
+        config.clone()
     }
 }

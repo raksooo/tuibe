@@ -11,10 +11,7 @@ use crate::config::{
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::{
-    mpsc,
-    mpsc::{Receiver, Sender},
-};
+use tokio::sync::mpsc;
 use tui::layout::Rect;
 
 #[derive(Debug)]
@@ -22,92 +19,87 @@ pub enum ConfigProviderMsg {
     Reload,
 }
 
+enum Child {
+    Loading(LoadingIndicator),
+    Main(MainView),
+}
+
+#[derive(Clone)]
 pub struct ConfigProvider {
-    program_sender: Sender<UpdateEvent>,
-    error_sender: Sender<ErrorMsg>,
-    config_sender: Sender<ConfigProviderMsg>,
-    main_view: Arc<Mutex<Box<dyn Component + Send>>>,
+    inner: ConfigProviderInner,
+}
+
+#[derive(Clone)]
+struct ConfigProviderInner {
+    program_sender: mpsc::Sender<UpdateEvent>,
+    error_sender: mpsc::Sender<ErrorMsg>,
+    config_sender: mpsc::Sender<ConfigProviderMsg>,
+    child: Arc<Mutex<Child>>,
 }
 
 impl ConfigProvider {
-    pub fn new(program_sender: Sender<UpdateEvent>, error_sender: Sender<ErrorMsg>) -> Self {
-        let (config_sender, config_receiver) = mpsc::channel(100);
+    pub fn new(
+        program_sender: mpsc::Sender<UpdateEvent>,
+        error_sender: mpsc::Sender<ErrorMsg>,
+    ) -> Self {
+        let (config_sender, config_receiver) = mpsc::channel(1);
 
-        let mut config_provider = Self {
+        let inner = ConfigProviderInner {
             program_sender: program_sender.clone(),
             error_sender,
             config_sender,
-            main_view: Arc::new(Mutex::new(Box::new(LoadingIndicator::new(
-                program_sender.clone(),
+            child: Arc::new(Mutex::new(Child::Loading(LoadingIndicator::new(
+                program_sender,
             )))),
         };
 
-        config_provider.init_configs();
+        let mut config_provider = Self { inner };
         config_provider.listen_config_msg(config_receiver);
+        config_provider.init_configs();
         config_provider
     }
 
-    fn listen_config_msg(&self, mut config_receiver: Receiver<ConfigProviderMsg>) {
-        let program_sender = self.program_sender.clone();
-        let error_sender = self.error_sender.clone();
-        let config_sender = self.config_sender.clone();
-        let main_view = Arc::clone(&self.main_view);
+    fn listen_config_msg(&self, mut config_receiver: mpsc::Receiver<ConfigProviderMsg>) {
+        let inner = self.inner.clone();
 
         tokio::spawn(async move {
-            loop {
-                match config_receiver.recv().await.unwrap() {
-                    ConfigProviderMsg::Reload => {
-                        Self::reload(
-                            program_sender.clone(),
-                            error_sender.clone(),
-                            config_sender.clone(),
-                            Arc::clone(&main_view),
-                        )
-                        .await
-                    }
-                }
+            while let Some(ConfigProviderMsg::Reload) = config_receiver.recv().await {
+                Self::reload(inner.clone()).await;
             }
         });
     }
 
     fn init_configs(&mut self) {
-        let program_sender = self.program_sender.clone();
-        let error_sender = self.error_sender.clone();
-        let config_sender = self.config_sender.clone();
-        let main_view = Arc::clone(&self.main_view);
+        let inner = self.inner.clone();
+        let program_sender = inner.program_sender.clone();
 
         tokio::spawn(async move {
-            Self::init_configs_impl(
-                program_sender.clone(),
-                error_sender,
-                config_sender,
-                main_view,
-            )
-            .await;
+            Self::init_configs_impl(inner).await;
             let _ = program_sender.send(UpdateEvent::Redraw).await;
         });
     }
 
-    async fn init_configs_impl(
-        program_sender: Sender<UpdateEvent>,
-        error_sender: Sender<ErrorMsg>,
-        config_sender: Sender<ConfigProviderMsg>,
-        main_view: Arc<Mutex<Box<dyn Component + Send>>>,
-    ) {
-        error_sender.clone().run_or_send(
+    async fn init_configs_impl(inner: ConfigProviderInner) {
+        inner.error_sender.clone().run_or_send(
             Self::load_configs().await,
             false,
             move |(common_config, config)| {
-                let mut main_view = main_view.lock();
-                *main_view = Box::new(MainView::new(
-                    program_sender.clone(),
-                    error_sender.clone(),
-                    config_sender,
+                let videos = config.videos();
+
+                let program_sender = inner.program_sender.clone();
+                let error_sender = inner.error_sender.clone();
+                let config_view_creator = |main_sender| {
+                    RssConfigView::new(program_sender, error_sender, main_sender, config)
+                };
+
+                let mut child = inner.child.lock();
+                *child = Child::Main(MainView::new(
+                    inner.program_sender,
+                    inner.error_sender,
+                    inner.config_sender,
                     common_config,
-                    config.videos(),
-                    |main_sender| {
-                        RssConfigView::new(program_sender, error_sender, main_sender, config)
-                    },
+                    videos,
+                    config_view_creator,
                 ));
             },
         );
@@ -121,59 +113,45 @@ impl ConfigProvider {
         Ok((common_config, config))
     }
 
-    async fn reload(
-        program_sender: Sender<UpdateEvent>,
-        error_sender: Sender<ErrorMsg>,
-        config_sender: Sender<ConfigProviderMsg>,
-        main_view: Arc<Mutex<Box<dyn Component + Send>>>,
-    ) {
+    async fn reload(inner: ConfigProviderInner) {
         {
-            let mut main_view = main_view.lock();
-            *main_view = Box::new(LoadingIndicator::new(program_sender.clone()));
+            let mut child = inner.child.lock();
+            *child = Child::Loading(LoadingIndicator::new(inner.program_sender.clone()));
         }
-        let _ = program_sender.send(UpdateEvent::Redraw).await;
+        let _ = inner.program_sender.send(UpdateEvent::Redraw).await;
 
-        Self::init_configs_impl(
-            program_sender.clone(),
-            error_sender.clone(),
-            config_sender.clone(),
-            Arc::clone(&main_view),
-        )
-        .await;
-        let _ = program_sender.send(UpdateEvent::Redraw).await;
+        Self::init_configs_impl(inner.clone()).await;
+        let _ = inner.program_sender.send(UpdateEvent::Redraw).await;
     }
 }
 
 impl Component for ConfigProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut main_view = self.main_view.lock();
-        main_view.draw(f, area);
+        let mut child = self.inner.child.lock();
+        match *child {
+            Child::Loading(ref mut loading_indicator) => &loading_indicator.draw(f, area),
+            Child::Main(ref mut main_view) => &main_view.draw(f, area),
+        };
     }
 
     fn handle_event(&mut self, event: Event) {
-        if let Event::Key(event) = event {
-            match event.code {
-                KeyCode::Char('r') => {
-                    let program_sender = self.program_sender.clone();
-                    let error_sender = self.error_sender.clone();
-                    let config_sender = self.config_sender.clone();
-                    let main_view = Arc::clone(&self.main_view);
-                    tokio::spawn(async move {
-                        Self::reload(program_sender, error_sender, config_sender, main_view).await;
-                    });
-                    return;
+        let mut child = self.inner.child.lock();
+        if let Child::Main(ref mut main_view) = *child {
+            match event {
+                Event::Key(event) if event.code == KeyCode::Char('r') => {
+                    tokio::spawn(Self::reload(self.inner.clone()));
                 }
-                _ => (),
+                event => main_view.handle_event(event),
             }
         }
-
-        let mut main_view = self.main_view.lock();
-        main_view.handle_event(event);
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
-        let mut events = vec![("r".to_string(), "Reload".to_string())];
-        events.append(&mut self.main_view.lock().registered_events());
+        let mut events = vec![];
+        if let Child::Main(ref mut main_view) = *self.inner.child.lock() {
+            events.push(("r".to_string(), "Reload".to_string()));
+            events.append(&mut main_view.registered_events());
+        }
         events
     }
 }

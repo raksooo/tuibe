@@ -16,16 +16,17 @@ use tui::{backend::CrosstermBackend, Terminal};
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.contains(&"-h".to_string()) || args.contains(&"--help".to_string()) {
-        println!("Available options:");
-        println!("  -h|--help                 Show this help message.");
-        println!("  --import-youtube <path>   Import subscriptions csv from YouTube takeout");
-        println!("  --player <player>         Override player in config");
-    } else if let Some(path) = args
+    if args.iter().any(|arg| arg == "-h" || arg == "--help") {
+        print_help();
+        return;
+    }
+
+    let youtube_export_path = args
         .into_iter()
-        .skip_while(|arg| arg.eq("--import-youtube"))
-        .nth(1)
-    {
+        .skip_while(|arg| arg == "--import-youtube")
+        .nth(1);
+
+    if let Some(path) = youtube_export_path {
         RssConfigHandler::load()
             .await
             .expect("Failed to load config")
@@ -34,6 +35,13 @@ async fn main() {
     } else {
         run().await;
     }
+}
+
+fn print_help() {
+    println!("Available options:");
+    println!("  -h|--help                 Show this help message.");
+    println!("  --import-youtube <path>   Import subscriptions csv from YouTube takeout");
+    println!("  --player <player>         Override player in config");
 }
 
 async fn run() {
@@ -45,7 +53,7 @@ async fn run() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::create(&mut terminal, |program_sender| App::new(program_sender)).await;
+    ui::create(&mut terminal, App::new).await;
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(

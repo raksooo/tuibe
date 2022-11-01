@@ -17,15 +17,14 @@ pub struct LoadingIndicator {
 impl LoadingIndicator {
     pub fn new(program_sender: Sender<UpdateEvent>) -> Self {
         let dots = Arc::new(Mutex::new(0));
-        let dialog = Dialog::new(&Self::format_text(0), None);
-        let dots_async = Arc::clone(&dots);
+
+        let dots_clone = Arc::clone(&dots);
         let handle = tokio::spawn(async move {
             loop {
                 Delay::new(Duration::from_millis(500)).await;
                 {
-                    let mut dots = dots_async.lock();
-                    *dots += 1;
-                    *dots %= 4;
+                    let mut dots = dots_clone.lock();
+                    *dots = (*dots + 1) % 4;
                 }
                 let _ = program_sender.send(UpdateEvent::Redraw).await;
             }
@@ -33,7 +32,7 @@ impl LoadingIndicator {
 
         Self {
             dots,
-            dialog,
+            dialog: Dialog::new(&Self::format_text(0)),
             handle,
         }
     }

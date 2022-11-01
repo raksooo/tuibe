@@ -87,6 +87,7 @@ impl FeedView {
         for mut video in self.videos.iter_mut() {
             video.selected = video.video.date.timestamp() > last_played_timestamp;
         }
+
         let common_config = Arc::clone(&self.common_config);
         tokio::spawn(async move {
             common_config
@@ -103,8 +104,9 @@ impl FeedView {
             .map(|video| video.video.clone())
             .collect();
 
-        if let Some(newest_video) = selected_videos.get(0) {
+        if let Some(newest_video) = selected_videos.first() {
             self.update_last_played_timestamp(newest_video.date.timestamp());
+
             {
                 let mut playing = self.playing.lock();
                 *playing = true;
@@ -145,7 +147,7 @@ impl FeedView {
     }
 
     fn is_playing(&self) -> bool {
-        self.playing.lock().clone()
+        *self.playing.lock()
     }
 
     fn create_list(&self, area: Rect) -> List<'_> {
@@ -184,11 +186,11 @@ impl FeedView {
         let description = self
             .videos
             .get(self.current_item)
-            .map(|video| video.video.description.to_owned())
-            .unwrap_or("".to_string());
+            .map(|video| video.video.description.clone())
+            .unwrap();
 
         Paragraph::new(description)
-            .block(Block::default().title("Description").borders(Borders::ALL))
+            .block(Block::default().title("Description").borders(Borders::TOP))
             .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: true })
     }
@@ -208,7 +210,7 @@ impl Component for FeedView {
         f.render_widget(description, description_area);
 
         if *self.playing.lock() {
-            Dialog::new("Playing selection.", None).draw(f, area);
+            Dialog::new("Playing selection.").draw(f, area);
         }
     }
 
@@ -219,32 +221,30 @@ impl Component for FeedView {
                 *playing = false;
                 self.program_sender.send_sync(UpdateEvent::Redraw);
             }
-        } else {
-            if let Event::Key(event) = event {
-                match event.code {
-                    KeyCode::Up => self.move_up(),
-                    KeyCode::Down => self.move_down(),
-                    KeyCode::Char('j') => self.move_down(),
-                    KeyCode::Char('k') => self.move_up(),
-                    KeyCode::Char('g') => self.move_top(),
-                    KeyCode::Char(' ') => self.toggle_current_item(),
-                    KeyCode::Char('p') => self.play(),
-                    _ => (),
-                }
+        } else if let Event::Key(event) = event {
+            match event.code {
+                KeyCode::Up => self.move_up(),
+                KeyCode::Down => self.move_down(),
+                KeyCode::Char('j') => self.move_down(),
+                KeyCode::Char('k') => self.move_up(),
+                KeyCode::Char('g') => self.move_top(),
+                KeyCode::Char(' ') => self.toggle_current_item(),
+                KeyCode::Char('p') => self.play(),
+                _ => (),
             }
         }
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
         if self.is_playing() {
-            vec![("Esc".to_string(), "Close".to_string())]
+            vec![(String::from("Esc"), String::from("Close"))]
         } else {
             vec![
-                ("j".to_string(), "Down".to_string()),
-                ("k".to_string(), "Up".to_string()),
-                ("g".to_string(), "Top".to_string()),
-                ("Space".to_string(), "Select".to_string()),
-                ("p".to_string(), "Play".to_string()),
+                (String::from("j"), String::from("Down")),
+                (String::from("k"), String::from("Up")),
+                (String::from("g"), String::from("Top")),
+                (String::from("Space"), String::from("Select")),
+                (String::from("p"), String::from("Play")),
             ]
         }
     }

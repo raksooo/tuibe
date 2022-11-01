@@ -4,7 +4,7 @@ use super::{
     error_handler::ErrorHandler,
 };
 use crate::sender_ext::SenderExt;
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode};
 use tokio::sync::mpsc;
 use tui::{
     layout::Rect,
@@ -40,30 +40,37 @@ impl App {
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let content_area = Rect::new(area.x, area.y, area.width, area.height - 1);
-        let events_area = Rect::new(area.x + 1, area.height - 1, area.width - 2, 1);
+        let events_height = 2;
+        let content_area = Rect::new(area.x, area.y, area.width, area.height - events_height);
+        let events_area = Rect::new(
+            area.x + 1,
+            area.height - events_height,
+            area.width - 2,
+            events_height,
+        );
 
         self.error_handler.draw(f, content_area);
 
-        let events = Paragraph::new(Self::format_events(self.registered_events()))
-            .block(Block::default().borders(Borders::NONE))
+        let events_label = Self::format_events(self.registered_events());
+        let events = Paragraph::new(events_label)
+            .block(Block::default().borders(Borders::TOP))
             .style(Style::default().fg(Color::White));
 
         f.render_widget(events, events_area);
     }
 
     fn handle_event(&mut self, event: Event) {
-        if event == Event::Key(KeyEvent::from(KeyCode::Char('q'))) {
-            self.program_sender.send_sync(UpdateEvent::Quit);
-        } else if let Event::Resize(_, _) = event {
-            self.program_sender.send_sync(UpdateEvent::Redraw);
-        } else {
-            self.error_handler.handle_event(event);
+        match event {
+            Event::Key(event) if event.code == KeyCode::Char('q') => {
+                self.program_sender.send_sync(UpdateEvent::Quit)
+            }
+            Event::Resize(_, _) => self.program_sender.send_sync(UpdateEvent::Redraw),
+            _ => self.error_handler.handle_event(event),
         }
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
-        let mut events = vec![("q".to_string(), "Quit".to_string())];
+        let mut events = vec![(String::from("q"), String::from("Quit"))];
         events.append(&mut self.error_handler.registered_events());
         events
     }

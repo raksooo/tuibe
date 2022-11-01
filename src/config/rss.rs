@@ -1,7 +1,7 @@
 use super::file_handler::ConfigFileHandler;
 use crate::config::{
     config::{Config, ConfigResult, Video},
-    error::{ConfigError, FeedError},
+    error::ConfigError,
 };
 use async_trait::async_trait;
 use atom_syndication::Entry;
@@ -12,15 +12,9 @@ use tokio::{fs, sync::oneshot};
 
 const CONFIG_NAME: &str = "rss";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct RssConfig {
     pub feeds: Vec<String>,
-}
-
-impl Default for RssConfig {
-    fn default() -> Self {
-        Self { feeds: Vec::new() }
-    }
 }
 
 #[derive(Clone)]
@@ -42,7 +36,8 @@ pub struct RssConfigHandler {
 }
 
 impl RssConfigHandler {
-    pub fn add_feed(&self, url: String) -> oneshot::Receiver<ConfigResult> {
+    pub fn add_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
+        let url = String::from(url);
         self.modify(|mut data| async move {
             Self::fetch_feed(&url, &mut data).await?;
             data.config.feeds.push(url);
@@ -51,19 +46,16 @@ impl RssConfigHandler {
     }
 
     pub async fn import_youtube(&self, path: String) {
-        println!("Importing config...");
+        println!("Importing subscriptions...");
         let content = fs::read_to_string(&path)
             .await
             .expect("Failed to read file");
         let mut urls: Vec<String> = content
             .trim()
-            .split("\n")
+            .split('\n')
             .skip(1)
             .map(|line| {
-                let channel_id = line
-                    .split(",")
-                    .nth(0)
-                    .expect(&format!("Failed to import: {}", line));
+                let channel_id = line.split(',').next().expect("Import failed");
                 format!(
                     "https://www.youtube.com/feeds/videos.xml?channel_id={}",
                     channel_id
@@ -86,10 +78,11 @@ impl RssConfigHandler {
         println!("Done.");
     }
 
-    pub fn remove_feed(&self, url: String) -> oneshot::Receiver<ConfigResult> {
+    pub fn remove_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
+        let url = String::from(url);
         self.modify(|mut data| async move {
-            data.config.feeds.retain(|feed| feed.to_owned() != url);
-            data.feeds.retain(|feed| feed.url.to_owned() != url);
+            data.config.feeds.retain(|feed| feed != &url);
+            data.feeds.retain(|feed| feed.url != url);
             Ok(data)
         })
     }
@@ -99,34 +92,32 @@ impl RssConfigHandler {
         data.feeds.clone()
     }
 
-    async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, FeedError> {
+    async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, ConfigError> {
         let content = reqwest::get(url)
             .await
-            .map_err(|_| FeedError::FetchFeed)?
+            .map_err(|_| ConfigError::FetchFeed)?
             .bytes()
             .await
-            .map_err(|_| FeedError::FetchFeed)?;
+            .map_err(|_| ConfigError::FetchFeed)?;
 
         atom_syndication::Feed::read_from(&content[..])
-            .map_err(|error| FeedError::ReadFeed { error })
+            .map_err(|error| ConfigError::ReadFeed { error })
     }
 
     async fn fetch_feed(url: &str, data: &mut RssConfigHandlerData) -> Result<(), ConfigError> {
-        let rss = Self::fetch_rss(&url).await?;
+        let rss = Self::fetch_rss(url).await?;
         let videos = Self::parse_videos(&rss).await?;
 
         data.feeds.push(Feed {
             title: rss.title().to_string(),
-            url: url.to_string(),
+            url: String::from(url),
         });
-        for video in videos {
-            data.videos.insert(video);
-        }
+        data.videos.extend(videos);
 
         Ok(())
     }
 
-    async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, FeedError> {
+    async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, ConfigError> {
         use chrono::offset::Utc;
 
         let author = rss.title().as_str();
@@ -134,14 +125,14 @@ impl RssConfigHandler {
             .entries()
             .iter()
             .map(|entry| Self::parse_video(entry, author))
-            .collect::<Result<Vec<Video>, FeedError>>()?;
+            .collect::<Result<_, _>>()?;
 
         let now = Utc::now();
         videos.retain(|video| now.years_since(video.date.into()).unwrap() < 1);
         Ok(videos)
     }
 
-    fn parse_video(entry: &Entry, author: &str) -> Result<Video, FeedError> {
+    fn parse_video(entry: &Entry, author: &str) -> Result<Video, ConfigError> {
         let description = entry
             .extensions()
             .get("media")
@@ -151,23 +142,23 @@ impl RssConfigHandler {
             .and_then(|description| description.first())
             .and_then(|description| description.value())
             .ok_or("")
-            .map_err(|_| FeedError::ParseVideo)?
+            .map_err(|_| ConfigError::ParseVideo)?
             .to_string();
 
         let url = entry
             .links()
             .first()
-            .ok_or(FeedError::ParseVideo)?
+            .ok_or(ConfigError::ParseVideo)?
             .href()
             .to_string();
 
         Ok(Video {
-            title: entry.title().as_str().to_string(),
+            title: entry.title().to_string(),
             url,
             author: author.to_string(),
             description,
             length: 0,
-            date: entry.published().ok_or(FeedError::ParseVideo)?.to_owned(),
+            date: entry.published().ok_or(ConfigError::ParseVideo)?.to_owned(),
         })
     }
 
@@ -244,11 +235,7 @@ impl Config for RssConfigHandler {
         self.modify(|mut data| async {
             for url in data.config.clone().feeds.iter() {
                 match Self::fetch_feed(url, &mut data).await {
-                    Ok(_) => (),
-                    Err(ConfigError::FeedError {
-                        error: FeedError::ReadFeed { .. },
-                        ..
-                    }) => (),
+                    Ok(_) | Err(ConfigError::ReadFeed { .. }) => (),
                     Err(error) => return Err(error),
                 };
             }

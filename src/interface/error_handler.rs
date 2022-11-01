@@ -27,7 +27,7 @@ impl ErrorHandler {
         C: Component + 'static,
         CF: FnOnce(mpsc::Sender<ErrorMsg>) -> C,
     {
-        let (error_sender, error_receiver) = mpsc::channel(100);
+        let (error_sender, error_receiver) = mpsc::channel(10);
 
         let new_error_handler = Self {
             program_sender,
@@ -35,16 +35,15 @@ impl ErrorHandler {
             error: Arc::new(Mutex::new(None)),
         };
 
-        new_error_handler.listen_error(error_receiver);
+        new_error_handler.listen_error_msg(error_receiver);
         new_error_handler
     }
 
-    fn listen_error(&self, mut error_receiver: mpsc::Receiver<ErrorMsg>) {
+    fn listen_error_msg(&self, mut error_receiver: mpsc::Receiver<ErrorMsg>) {
         let program_sender = self.program_sender.clone();
         let error = Arc::clone(&self.error);
         tokio::spawn(async move {
-            loop {
-                let new_error = error_receiver.recv().await.unwrap();
+            while let Some(new_error) = error_receiver.recv().await {
                 {
                     let mut error = error.lock();
                     *error = Some(new_error);
@@ -60,7 +59,7 @@ impl Component for ErrorHandler {
         self.child.draw(f, area);
 
         if let Some(ref error) = *self.error.lock() {
-            Dialog::new("An error occured", Some(&error.message)).draw(f, area);
+            Dialog::new_with_body("An error occured", Some(&error.message)).draw(f, area);
         }
     }
 
@@ -101,7 +100,7 @@ pub trait ErrorSenderExt {
     async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
     where
         T: Send,
-        E: Display + Send,
+        E: Display + Send + Sync,
         R: Future<Output = ()> + Send,
         F: FnOnce(T) -> R + Send;
 }
@@ -114,33 +113,31 @@ impl ErrorSenderExt for mpsc::Sender<ErrorMsg> {
         E: Display,
         F: FnOnce(T),
     {
-        if result.is_ok() {
-            unsafe {
-                f(result.unwrap_unchecked());
-            }
-        } else {
-            unsafe {
-                let message = result.unwrap_err_unchecked().to_string();
-                self.send_sync(ErrorMsg { message, ignorable });
-            }
+        match result {
+            Ok(value) => f(value),
+            Err(err) => self.send_sync(ErrorMsg {
+                message: err.to_string(),
+                ignorable,
+            }),
         }
     }
 
     async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
     where
         T: Send,
-        E: Display + Send,
+        E: Display + Send + Sync,
         R: Future<Output = ()> + Send,
         F: FnOnce(T) -> R + Send,
     {
-        if result.is_ok() {
-            unsafe {
-                f(result.unwrap_unchecked()).await;
-            }
-        } else {
-            unsafe {
-                let message = result.unwrap_err_unchecked().to_string();
-                let _ = self.send(ErrorMsg { message, ignorable }).await;
+        match result {
+            Ok(value) => f(value).await,
+            Err(err) => {
+                let _ = self
+                    .send(ErrorMsg {
+                        message: err.to_string(),
+                        ignorable,
+                    })
+                    .await;
             }
         }
     }

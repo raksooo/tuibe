@@ -11,16 +11,23 @@ pub struct Dialog {
 }
 
 impl Dialog {
-    pub fn new(title: &str, body: Option<&str>) -> Self {
+    pub fn new(title: &str) -> Self {
         Self {
-            title: title.to_string(),
-            body: body.map(|value| value.to_owned()),
+            title: String::from(title),
+            body: None,
+        }
+    }
+
+    pub fn new_with_body(title: &str, body: Option<&str>) -> Self {
+        Self {
+            title: String::from(title),
+            body: body.map(String::from),
         }
     }
 
     pub fn update_text(&mut self, title: &str, body: Option<&str>) {
-        self.title = title.to_string();
-        self.body = body.map(|value| value.to_owned());
+        self.title = String::from(title);
+        self.body = body.map(String::from);
     }
 }
 

@@ -15,7 +15,7 @@ use tokio::sync::mpsc::Sender;
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem},
 };
 
 pub struct RssConfigView {
@@ -69,11 +69,12 @@ impl RssConfigView {
             .get(self.selected)
             .unwrap()
             .url
-            .to_string();
+            .clone();
 
-        let remove_receiver = self.rss_config.remove_feed(url);
+        let remove_receiver = self.rss_config.remove_feed(&url);
         let program_sender = self.program_sender.clone();
         let error_sender = self.error_sender.clone();
+
         tokio::spawn(async move {
             let remove_result = remove_receiver.await.unwrap();
             error_sender
@@ -84,7 +85,7 @@ impl RssConfigView {
         });
     }
 
-    fn add_url(&self, url: String) {
+    fn add_url(&self, url: &str) {
         {
             let mut loading_indicator = self.loading_indicator.lock();
             *loading_indicator = Some(LoadingIndicator::new(self.program_sender.clone()));
@@ -95,6 +96,7 @@ impl RssConfigView {
         let program_sender = self.program_sender.clone();
         let error_sender = self.error_sender.clone();
         let loading_indicator = Arc::clone(&self.loading_indicator);
+
         tokio::spawn(async move {
             {
                 let mut loading_indicator = loading_indicator.lock();
@@ -110,41 +112,38 @@ impl RssConfigView {
         });
     }
 
-    fn create_list(&self) -> List<'_> {
+    fn create_list(&self, area: Rect) -> List<'_> {
         let mut items: Vec<ListItem> = Vec::new();
+        let feeds = self.rss_config.feeds();
 
-        for (index, feed) in self.rss_config.feeds().iter().enumerate() {
-            let mut item = ListItem::new(feed.title.to_string());
-            if index == self.selected {
+        let height: usize = area.height.into();
+        let nfeeds = feeds.len();
+        let start_index = if self.selected < height / 2 {
+            0
+        } else if self.selected >= nfeeds - height / 2 {
+            nfeeds - height + 1
+        } else {
+            self.selected - (height / 2)
+        };
+
+        for (index, feed) in feeds.iter().skip(start_index).enumerate() {
+            let mut item = ListItem::new(feed.title.clone());
+            if index + start_index == self.selected {
                 item = item.style(Style::default().fg(Color::Green));
             }
             items.push(item);
         }
 
         List::new(items)
-            .block(Block::default().title("Feeds").borders(Borders::ALL))
+            .block(Block::default().title("Feeds").borders(Borders::RIGHT))
             .style(Style::default().fg(Color::White))
     }
 }
 
 impl Component for RssConfigView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let instruction_height = 2;
-        let list_area = Rect::new(area.x, area.y, area.width, area.height - instruction_height);
-        let instruction_area = Rect::new(
-            area.x,
-            area.height - instruction_height,
-            area.width,
-            instruction_height,
-        );
-
-        let list = self.create_list();
-        f.render_widget(list, list_area);
-
-        let instruction = Paragraph::new("Paste URL to add")
-            .block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM))
-            .style(Style::default().fg(Color::White));
-        f.render_widget(instruction, instruction_area);
+        let list = self.create_list(area);
+        f.render_widget(list, area);
 
         if let Some(ref mut loading_indicator) = *self.loading_indicator.lock() {
             loading_indicator.draw(f, area);
@@ -162,17 +161,17 @@ impl Component for RssConfigView {
                 KeyCode::Char('k') => self.move_up(),
                 _ => (),
             },
-            Event::Paste(url) => self.add_url(url),
+            Event::Paste(url) => self.add_url(&url),
             _ => (),
         }
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
         vec![
-            ("Esc".to_string(), "Close".to_string()),
-            ("j".to_string(), "Down".to_string()),
-            ("k".to_string(), "Up".to_string()),
-            ("Paste".to_string(), "Add feed".to_string()),
+            (String::from("Esc"), String::from("Close")),
+            (String::from("j"), String::from("Down")),
+            (String::from("k"), String::from("Up")),
+            (String::from("Paste"), String::from("Add feed")),
         ]
     }
 }

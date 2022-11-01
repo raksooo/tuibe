@@ -76,7 +76,7 @@ impl ConfigFileHandler {
             _ => {
                 let home = std::env::var("HOME").map_err(|_| ConfigError::FindConfigDir)?;
                 path.push(home);
-                path.push(".config".to_string());
+                path.push(".config");
             }
         }
 

@@ -26,15 +26,6 @@ pub enum ConfigError {
     #[error(display = "Failed to write to config file")]
     WriteConfigFile,
 
-    #[error(display = "{}", error)]
-    FeedError {
-        #[error(from)]
-        error: FeedError,
-    },
-}
-
-#[derive(Debug, Error)]
-pub enum FeedError {
     #[error(display = "Failed to fetch RSS feed")]
     FetchFeed,
 

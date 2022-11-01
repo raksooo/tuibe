@@ -41,7 +41,7 @@ impl MainView {
         C: Component + Send + 'static,
         CF: FnOnce(mpsc::Sender<MainViewMsg>) -> C,
     {
-        let (main_sender, main_receiver) = mpsc::channel(100);
+        let (main_sender, main_receiver) = mpsc::channel(10);
 
         let new_main_view = Self {
             show_config: Arc::new(Mutex::new(false)),
@@ -60,27 +60,14 @@ impl MainView {
     fn listen_main_view_msg(&self, mut main_receiver: mpsc::Receiver<MainViewMsg>) {
         let show_config = Arc::clone(&self.show_config);
         let config_sender = self.config_sender.clone();
+
         tokio::spawn(async move {
-            loop {
-                if let Some(msg) = main_receiver.recv().await {
-                    match msg {
-                        MainViewMsg::CloseConfig => {
-                            let mut show_config = show_config.lock();
-                            *show_config = false;
-                            config_sender.send_sync(ConfigProviderMsg::Reload);
-                        }
-                    }
-                } else {
-                    break;
-                }
+            while let Some(MainViewMsg::CloseConfig) = main_receiver.recv().await {
+                let mut show_config = show_config.lock();
+                *show_config = false;
+                config_sender.send_sync(ConfigProviderMsg::Reload);
             }
         });
-    }
-
-    fn set_show_config(&mut self) {
-        let mut show_config = self.show_config.lock();
-        *show_config = true;
-        self.program_sender.send_sync(UpdateEvent::Redraw);
     }
 }
 
@@ -110,12 +97,12 @@ impl Component for MainView {
     fn handle_event(&mut self, event: Event) {
         if *self.show_config.lock() {
             self.config.handle_event(event);
+        } else if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
+            let mut show_config = self.show_config.lock();
+            *show_config = true;
+            self.program_sender.send_sync(UpdateEvent::Redraw);
         } else {
-            if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
-                self.set_show_config();
-            } else {
-                self.feed.handle_event(event);
-            }
+            self.feed.handle_event(event);
         }
     }
 
@@ -123,7 +110,7 @@ impl Component for MainView {
         if *self.show_config.lock() {
             self.config.registered_events()
         } else {
-            let mut events = vec![("c".to_string(), "Configure".to_string())];
+            let mut events = vec![(String::from("c"), String::from("Configure"))];
             events.append(&mut self.feed.registered_events());
             events
         }
