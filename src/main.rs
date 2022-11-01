@@ -15,8 +15,15 @@ use tui::{backend::CrosstermBackend, Terminal};
 
 #[tokio::main]
 async fn main() {
-    if let Some(path) = std::env::args()
-        .skip_while(|arg| arg != "--import-youtube")
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"-h".to_string()) || args.contains(&"--help".to_string()) {
+        println!("Available options:");
+        println!("  -h|--help                 Show this help message.");
+        println!("  --import-youtube <path>   Import subscriptions csv from YouTube takeout");
+        println!("  --player <player>         Override player in config");
+    } else if let Some(path) = args
+        .into_iter()
+        .skip_while(|arg| arg.eq("--import-youtube"))
         .nth(1)
     {
         RssConfigHandler::load()
