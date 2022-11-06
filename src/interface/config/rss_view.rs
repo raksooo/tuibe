@@ -1,7 +1,7 @@
 use crate::{
     config::rss::RssConfigHandler,
     interface::{
-        component::{Component, Frame, UpdateEvent},
+        component::{Component, Frame},
         error_handler::{ErrorMsg, ErrorSenderExt},
         loading_indicator::LoadingIndicator,
         main_view::MainViewMsg,
@@ -17,7 +17,7 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    program_sender: flume::Sender<UpdateEvent>,
+    redraw_sender: flume::Sender<()>,
     error_sender: flume::Sender<ErrorMsg>,
     main_sender: flume::Sender<MainViewMsg>,
     rss_config: RssConfigHandler,
@@ -27,13 +27,13 @@ pub struct RssConfigView {
 
 impl RssConfigView {
     pub fn new(
-        program_sender: flume::Sender<UpdateEvent>,
+        redraw_sender: flume::Sender<()>,
         error_sender: flume::Sender<ErrorMsg>,
         main_sender: flume::Sender<MainViewMsg>,
         rss_config: RssConfigHandler,
     ) -> Self {
         Self {
-            program_sender,
+            redraw_sender,
             error_sender,
             main_sender,
             rss_config,
@@ -49,14 +49,14 @@ impl RssConfigView {
     fn move_up(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
-            let _ = self.program_sender.send(UpdateEvent::Redraw);
+            let _ = self.redraw_sender.send(());
         }
     }
 
     fn move_down(&mut self) {
         if self.selected + 1 < self.rss_config.feeds().len() {
             self.selected += 1;
-            let _ = self.program_sender.send(UpdateEvent::Redraw);
+            let _ = self.redraw_sender.send(());
         }
     }
 
@@ -70,14 +70,14 @@ impl RssConfigView {
             .clone();
 
         let remove_receiver = self.rss_config.remove_feed(&url);
-        let program_sender = self.program_sender.clone();
+        let redraw_sender = self.redraw_sender.clone();
         let error_sender = self.error_sender.clone();
 
         tokio::spawn(async move {
             let remove_result = remove_receiver.await.unwrap();
             error_sender
                 .run_or_send_async(remove_result, true, |_| async {
-                    let _ = program_sender.send_async(UpdateEvent::Redraw).await;
+                    let _ = redraw_sender.send_async(()).await;
                 })
                 .await;
         });
@@ -86,12 +86,12 @@ impl RssConfigView {
     fn add_url(&self, url: &str) {
         {
             let mut loading_indicator = self.loading_indicator.lock();
-            *loading_indicator = Some(LoadingIndicator::new(self.program_sender.clone()));
+            *loading_indicator = Some(LoadingIndicator::new(self.redraw_sender.clone()));
         }
-        let _ = self.program_sender.send(UpdateEvent::Redraw);
+        let _ = self.redraw_sender.send(());
 
         let add_receiver = self.rss_config.add_feed(url);
-        let program_sender = self.program_sender.clone();
+        let redraw_sender = self.redraw_sender.clone();
         let error_sender = self.error_sender.clone();
         let loading_indicator = Arc::clone(&self.loading_indicator);
 
@@ -104,7 +104,7 @@ impl RssConfigView {
             let add_result = add_receiver.await.unwrap();
             error_sender
                 .run_or_send_async(add_result, true, |_| async {
-                    let _ = program_sender.send_async(UpdateEvent::Redraw).await;
+                    let _ = redraw_sender.send_async(()).await;
                 })
                 .await;
         });

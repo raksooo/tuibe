@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, Frame, UpdateEvent},
+    component::{Component, Frame},
     config_provider::ConfigProvider,
     error_handler::ErrorHandler,
 };
@@ -11,18 +11,20 @@ use tui::{
 };
 
 pub struct App {
-    program_sender: flume::Sender<UpdateEvent>,
+    quit_sender: flume::Sender<()>,
+    redraw_sender: flume::Sender<()>,
     error_handler: ErrorHandler,
 }
 
 impl App {
-    pub fn new(program_sender: flume::Sender<UpdateEvent>) -> Self {
-        let error_handler = ErrorHandler::new(program_sender.clone(), |error_sender| {
-            ConfigProvider::new(program_sender.clone(), error_sender)
+    pub fn new(quit_sender: flume::Sender<()>, redraw_sender: flume::Sender<()>) -> Self {
+        let error_handler = ErrorHandler::new(redraw_sender.clone(), |error_sender| {
+            ConfigProvider::new(redraw_sender.clone(), error_sender)
         });
 
         Self {
-            program_sender,
+            quit_sender,
+            redraw_sender,
             error_handler,
         }
     }
@@ -60,10 +62,10 @@ impl Component for App {
     fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(event) if event.code == KeyCode::Char('q') => {
-                let _ = self.program_sender.send(UpdateEvent::Quit);
+                let _ = self.quit_sender.send(());
             }
             Event::Resize(_, _) => {
-                let _ = self.program_sender.send(UpdateEvent::Redraw);
+                let _ = self.redraw_sender.send(());
             }
             _ => self.error_handler.handle_event(event),
         }

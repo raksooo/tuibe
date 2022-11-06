@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, Frame, UpdateEvent},
+    component::{Component, Frame},
     config::rss_view::RssConfigView,
     error_handler::{ErrorMsg, ErrorSenderExt},
     loading_indicator::LoadingIndicator,
@@ -30,25 +30,22 @@ pub struct ConfigProvider {
 
 #[derive(Clone)]
 struct ConfigProviderInner {
-    program_sender: flume::Sender<UpdateEvent>,
+    redraw_sender: flume::Sender<()>,
     error_sender: flume::Sender<ErrorMsg>,
     config_sender: flume::Sender<ConfigProviderMsg>,
     child: Arc<Mutex<Child>>,
 }
 
 impl ConfigProvider {
-    pub fn new(
-        program_sender: flume::Sender<UpdateEvent>,
-        error_sender: flume::Sender<ErrorMsg>,
-    ) -> Self {
+    pub fn new(redraw_sender: flume::Sender<()>, error_sender: flume::Sender<ErrorMsg>) -> Self {
         let (config_sender, config_receiver) = flume::bounded(1);
 
         let inner = ConfigProviderInner {
-            program_sender: program_sender.clone(),
+            redraw_sender: redraw_sender.clone(),
             error_sender,
             config_sender,
             child: Arc::new(Mutex::new(Child::Loading(LoadingIndicator::new(
-                program_sender,
+                redraw_sender,
             )))),
         };
 
@@ -70,11 +67,11 @@ impl ConfigProvider {
 
     fn init_configs(&mut self) {
         let inner = self.inner.clone();
-        let program_sender = inner.program_sender.clone();
+        let redraw_sender = inner.redraw_sender.clone();
 
         tokio::spawn(async move {
             Self::init_configs_impl(inner).await;
-            let _ = program_sender.send_async(UpdateEvent::Redraw).await;
+            let _ = redraw_sender.send_async(()).await;
         });
     }
 
@@ -85,15 +82,15 @@ impl ConfigProvider {
             move |(common_config, config)| {
                 let videos = config.videos();
 
-                let program_sender = inner.program_sender.clone();
+                let redraw_sender = inner.redraw_sender.clone();
                 let error_sender = inner.error_sender.clone();
                 let config_view_creator = |main_sender| {
-                    RssConfigView::new(program_sender, error_sender, main_sender, config)
+                    RssConfigView::new(redraw_sender, error_sender, main_sender, config)
                 };
 
                 let mut child = inner.child.lock();
                 *child = Child::Main(MainView::new(
-                    inner.program_sender,
+                    inner.redraw_sender,
                     inner.error_sender,
                     inner.config_sender,
                     common_config,
@@ -115,12 +112,12 @@ impl ConfigProvider {
     async fn reload(inner: ConfigProviderInner) {
         {
             let mut child = inner.child.lock();
-            *child = Child::Loading(LoadingIndicator::new(inner.program_sender.clone()));
+            *child = Child::Loading(LoadingIndicator::new(inner.redraw_sender.clone()));
         }
-        let _ = inner.program_sender.send_async(UpdateEvent::Redraw).await;
+        let _ = inner.redraw_sender.send_async(()).await;
 
         Self::init_configs_impl(inner.clone()).await;
-        let _ = inner.program_sender.send_async(UpdateEvent::Redraw).await;
+        let _ = inner.redraw_sender.send_async(()).await;
     }
 }
 

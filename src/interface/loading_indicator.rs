@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, Frame, UpdateEvent},
+    component::{Component, Frame},
     dialog::Dialog,
 };
 use futures_timer::Delay;
@@ -15,7 +15,7 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
-    pub fn new(program_sender: flume::Sender<UpdateEvent>) -> Self {
+    pub fn new(redraw_sender: flume::Sender<()>) -> Self {
         let dots = Arc::new(Mutex::new(0));
 
         let dots_clone = Arc::clone(&dots);
@@ -26,7 +26,7 @@ impl LoadingIndicator {
                     let mut dots = dots_clone.lock();
                     *dots = (*dots + 1) % 4;
                 }
-                let _ = program_sender.send_async(UpdateEvent::Redraw).await;
+                let _ = redraw_sender.send_async(()).await;
             }
         });
 

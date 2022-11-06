@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, Frame, UpdateEvent},
+    component::{Component, Frame},
     config_provider::ConfigProviderMsg,
     error_handler::ErrorMsg,
     feed_view::FeedView,
@@ -20,13 +20,13 @@ pub struct MainView {
     feed: FeedView,
     config: Box<dyn Component + Send>,
 
-    program_sender: flume::Sender<UpdateEvent>,
+    redraw_sender: flume::Sender<()>,
     config_sender: flume::Sender<ConfigProviderMsg>,
 }
 
 impl MainView {
     pub fn new<C, CF>(
-        program_sender: flume::Sender<UpdateEvent>,
+        redraw_sender: flume::Sender<()>,
         error_sender: flume::Sender<ErrorMsg>,
         config_sender: flume::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
@@ -42,10 +42,10 @@ impl MainView {
         let new_main_view = Self {
             show_config: Arc::new(Mutex::new(false)),
 
-            feed: FeedView::new(program_sender.clone(), error_sender, common_config, videos),
+            feed: FeedView::new(redraw_sender.clone(), error_sender, common_config, videos),
             config: Box::new(config_creator(main_sender)),
 
-            program_sender,
+            redraw_sender,
             config_sender,
         };
 
@@ -96,7 +96,7 @@ impl Component for MainView {
         } else if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
             let mut show_config = self.show_config.lock();
             *show_config = true;
-            let _ = self.program_sender.send(UpdateEvent::Redraw);
+            let _ = self.redraw_sender.send(());
         } else {
             self.feed.handle_event(event);
         }

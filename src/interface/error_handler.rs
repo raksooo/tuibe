@@ -1,5 +1,5 @@
 use super::{
-    component::{Component, Frame, UpdateEvent},
+    component::{Component, Frame},
     dialog::Dialog,
 };
 use async_trait::async_trait;
@@ -14,13 +14,13 @@ pub struct ErrorMsg {
 }
 
 pub struct ErrorHandler {
-    program_sender: flume::Sender<UpdateEvent>,
+    redraw_sender: flume::Sender<()>,
     child: Box<dyn Component>,
     error: Arc<Mutex<Option<ErrorMsg>>>,
 }
 
 impl ErrorHandler {
-    pub fn new<C, CF>(program_sender: flume::Sender<UpdateEvent>, child_creator: CF) -> Self
+    pub fn new<C, CF>(redraw_sender: flume::Sender<()>, child_creator: CF) -> Self
     where
         C: Component + 'static,
         CF: FnOnce(flume::Sender<ErrorMsg>) -> C,
@@ -28,7 +28,7 @@ impl ErrorHandler {
         let (error_sender, error_receiver) = flume::unbounded();
 
         let new_error_handler = Self {
-            program_sender,
+            redraw_sender,
             child: Box::new(child_creator(error_sender)),
             error: Arc::new(Mutex::new(None)),
         };
@@ -38,7 +38,7 @@ impl ErrorHandler {
     }
 
     fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMsg>) {
-        let program_sender = self.program_sender.clone();
+        let redraw_sender = self.redraw_sender.clone();
         let error = Arc::clone(&self.error);
         tokio::spawn(async move {
             while let Ok(new_error) = error_receiver.recv_async().await {
@@ -46,7 +46,7 @@ impl ErrorHandler {
                     let mut error = error.lock();
                     *error = Some(new_error);
                 }
-                let _ = program_sender.send(UpdateEvent::Redraw);
+                let _ = redraw_sender.send(());
             }
         });
     }
@@ -66,7 +66,7 @@ impl Component for ErrorHandler {
         if let Some(ErrorMsg { ignorable, .. }) = *error {
             if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 *error = None;
-                let _ = self.program_sender.send(UpdateEvent::Redraw);
+                let _ = self.redraw_sender.send(());
             }
         } else {
             self.child.handle_event(event);

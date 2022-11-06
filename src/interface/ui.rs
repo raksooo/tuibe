@@ -1,4 +1,4 @@
-use super::component::{Backend, Component, UpdateEvent};
+use super::component::{Backend, Component};
 use crossterm::event::EventStream;
 use tokio::select;
 use tokio_stream::StreamExt;
@@ -7,14 +7,15 @@ use tui::Terminal;
 pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F)
 where
     C: Component,
-    F: FnOnce(flume::Sender<UpdateEvent>) -> C,
+    F: FnOnce(flume::Sender<()>, flume::Sender<()>) -> C,
 {
     let mut event_reader = EventStream::new();
-    let (program_sender, program_receiver) = flume::unbounded();
+    let (quit_sender, quit_receiver) = flume::unbounded();
+    let (redraw_sender, redraw_receiver) = flume::unbounded();
 
-    let mut root = creator(program_sender.clone());
-    program_sender
-        .send_async(UpdateEvent::Redraw)
+    let mut root = creator(quit_sender, redraw_sender.clone());
+    redraw_sender
+        .send_async(())
         .await
         .expect("Failed to send update event");
     loop {
@@ -25,12 +26,12 @@ where
                 }
             },
 
-            event = program_receiver.recv_async() => {
-                if let Ok(event) = event {
-                    match event {
-                        UpdateEvent::Redraw => perform_draw(terminal, &mut root),
-                        UpdateEvent::Quit => break,
-                    }
+            _ = quit_receiver.recv_async() => break,
+
+            event = redraw_receiver.recv_async() => {
+                if event.is_ok() {
+                    redraw_receiver.drain();
+                    perform_draw(terminal, &mut root);
                 }
             },
         };
