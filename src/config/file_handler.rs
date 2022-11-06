@@ -80,7 +80,7 @@ impl ConfigFileHandler {
             }
         }
 
-        path.push("youtuibe");
+        path.push("tuibe");
         Ok(path)
     }
 }

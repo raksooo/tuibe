@@ -37,7 +37,7 @@ pub struct RssConfigHandler {
 
 impl RssConfigHandler {
     pub fn add_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
-        let url = String::from(url);
+        let url = url.to_owned();
         self.modify(|mut data| async move {
             Self::fetch_feed(&url, &mut data).await?;
             data.config.feeds.push(url);
@@ -79,7 +79,7 @@ impl RssConfigHandler {
     }
 
     pub fn remove_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
-        let url = String::from(url);
+        let url = url.to_owned();
         self.modify(|mut data| async move {
             data.config.feeds.retain(|feed| feed != &url);
             data.feeds.retain(|feed| feed.url != url);
@@ -110,7 +110,7 @@ impl RssConfigHandler {
 
         data.feeds.push(Feed {
             title: rss.title().to_string(),
-            url: String::from(url),
+            url: url.to_owned(),
         });
         data.videos.extend(videos);
 

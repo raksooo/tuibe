@@ -17,7 +17,7 @@ pub struct CommonConfig {
 impl Default for CommonConfig {
     fn default() -> Self {
         Self {
-            player: "mpv".to_string(),
+            player: String::from("mpv"),
             last_played_timestamp: Utc::now().timestamp(),
         }
     }

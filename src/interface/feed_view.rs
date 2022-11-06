@@ -3,14 +3,11 @@ use super::{
     dialog::Dialog,
     error_handler::{ErrorMsg, ErrorSenderExt},
 };
-use crate::{
-    config::{common::CommonConfigHandler, config::Video},
-    sender_ext::SenderExt,
-};
+use crate::config::{common::CommonConfigHandler, config::Video};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::{env, process::Stdio, sync::Arc};
-use tokio::{process::Command, sync::mpsc};
+use tokio::process::Command;
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -23,8 +20,8 @@ struct VideoListItem {
 }
 
 pub struct FeedView {
-    program_sender: mpsc::Sender<UpdateEvent>,
-    error_sender: mpsc::Sender<ErrorMsg>,
+    program_sender: flume::Sender<UpdateEvent>,
+    error_sender: flume::Sender<ErrorMsg>,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
     videos: Vec<VideoListItem>,
@@ -33,8 +30,8 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(
-        program_sender: mpsc::Sender<UpdateEvent>,
-        error_sender: mpsc::Sender<ErrorMsg>,
+        program_sender: flume::Sender<UpdateEvent>,
+        error_sender: flume::Sender<ErrorMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
     ) -> Self {
@@ -60,26 +57,26 @@ impl FeedView {
     fn move_up(&mut self) {
         if self.current_item > 0 {
             self.current_item -= 1;
-            self.program_sender.send_sync(UpdateEvent::Redraw);
+            let _ = self.program_sender.send(UpdateEvent::Redraw);
         }
     }
 
     fn move_top(&mut self) {
         self.current_item = 0;
-        self.program_sender.send_sync(UpdateEvent::Redraw);
+        let _ = self.program_sender.send(UpdateEvent::Redraw);
     }
 
     fn move_down(&mut self) {
         if self.current_item + 1 < self.videos.len() {
             self.current_item += 1;
-            self.program_sender.send_sync(UpdateEvent::Redraw);
+            let _ = self.program_sender.send(UpdateEvent::Redraw);
         }
     }
 
     fn toggle_current_item(&mut self) {
         if let Some(video) = self.videos.get_mut(self.current_item) {
             video.selected = !video.selected;
-            self.program_sender.send_sync(UpdateEvent::Redraw);
+            let _ = self.program_sender.send(UpdateEvent::Redraw);
         }
     }
 
@@ -111,7 +108,7 @@ impl FeedView {
                 let mut playing = self.playing.lock();
                 *playing = true;
             }
-            self.program_sender.send_sync(UpdateEvent::Redraw);
+            let _ = self.program_sender.send(UpdateEvent::Redraw);
 
             let player = self.get_player();
             let playing = Arc::clone(&self.playing);
@@ -132,7 +129,7 @@ impl FeedView {
                             let mut playing = playing.lock();
                             *playing = false;
                         }
-                        let _ = program_sender.send(UpdateEvent::Redraw).await;
+                        let _ = program_sender.send_async(UpdateEvent::Redraw).await;
                     })
                     .await;
             });
@@ -219,7 +216,7 @@ impl Component for FeedView {
             if event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 let mut playing = self.playing.lock();
                 *playing = false;
-                self.program_sender.send_sync(UpdateEvent::Redraw);
+                let _ = self.program_sender.send(UpdateEvent::Redraw);
             }
         } else if let Event::Key(event) = event {
             match event.code {

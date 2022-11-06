@@ -2,12 +2,10 @@ use super::{
     component::{Component, Frame, UpdateEvent},
     dialog::Dialog,
 };
-use crate::sender_ext::SenderExt;
 use async_trait::async_trait;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::{fmt::Display, future::Future, sync::Arc};
-use tokio::sync::mpsc;
 use tui::layout::Rect;
 
 pub struct ErrorMsg {
@@ -16,18 +14,18 @@ pub struct ErrorMsg {
 }
 
 pub struct ErrorHandler {
-    program_sender: mpsc::Sender<UpdateEvent>,
+    program_sender: flume::Sender<UpdateEvent>,
     child: Box<dyn Component>,
     error: Arc<Mutex<Option<ErrorMsg>>>,
 }
 
 impl ErrorHandler {
-    pub fn new<C, CF>(program_sender: mpsc::Sender<UpdateEvent>, child_creator: CF) -> Self
+    pub fn new<C, CF>(program_sender: flume::Sender<UpdateEvent>, child_creator: CF) -> Self
     where
         C: Component + 'static,
-        CF: FnOnce(mpsc::Sender<ErrorMsg>) -> C,
+        CF: FnOnce(flume::Sender<ErrorMsg>) -> C,
     {
-        let (error_sender, error_receiver) = mpsc::channel(10);
+        let (error_sender, error_receiver) = flume::unbounded();
 
         let new_error_handler = Self {
             program_sender,
@@ -39,16 +37,16 @@ impl ErrorHandler {
         new_error_handler
     }
 
-    fn listen_error_msg(&self, mut error_receiver: mpsc::Receiver<ErrorMsg>) {
+    fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMsg>) {
         let program_sender = self.program_sender.clone();
         let error = Arc::clone(&self.error);
         tokio::spawn(async move {
-            while let Some(new_error) = error_receiver.recv().await {
+            while let Ok(new_error) = error_receiver.recv_async().await {
                 {
                     let mut error = error.lock();
                     *error = Some(new_error);
                 }
-                program_sender.send_sync(UpdateEvent::Redraw);
+                let _ = program_sender.send(UpdateEvent::Redraw);
             }
         });
     }
@@ -68,7 +66,7 @@ impl Component for ErrorHandler {
         if let Some(ErrorMsg { ignorable, .. }) = *error {
             if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 *error = None;
-                self.program_sender.send_sync(UpdateEvent::Redraw);
+                let _ = self.program_sender.send(UpdateEvent::Redraw);
             }
         } else {
             self.child.handle_event(event);
@@ -79,7 +77,7 @@ impl Component for ErrorHandler {
         let error = self.error.lock();
         if let Some(ErrorMsg { ignorable, .. }) = *error {
             if ignorable {
-                vec![("Esc".to_string(), "Close".to_string())]
+                vec![(String::from("Esc"), String::from("Close"))]
             } else {
                 vec![]
             }
@@ -106,7 +104,7 @@ pub trait ErrorSenderExt {
 }
 
 #[async_trait]
-impl ErrorSenderExt for mpsc::Sender<ErrorMsg> {
+impl ErrorSenderExt for flume::Sender<ErrorMsg> {
     fn run_or_send<T, E, F>(&self, result: Result<T, E>, ignorable: bool, f: F)
     where
         T: Send,
@@ -115,10 +113,12 @@ impl ErrorSenderExt for mpsc::Sender<ErrorMsg> {
     {
         match result {
             Ok(value) => f(value),
-            Err(err) => self.send_sync(ErrorMsg {
-                message: err.to_string(),
-                ignorable,
-            }),
+            Err(err) => {
+                let _ = self.send(ErrorMsg {
+                    message: err.to_string(),
+                    ignorable,
+                });
+            }
         }
     }
 
@@ -133,7 +133,7 @@ impl ErrorSenderExt for mpsc::Sender<ErrorMsg> {
             Ok(value) => f(value).await,
             Err(err) => {
                 let _ = self
-                    .send(ErrorMsg {
+                    .send_async(ErrorMsg {
                         message: err.to_string(),
                         ignorable,
                     })

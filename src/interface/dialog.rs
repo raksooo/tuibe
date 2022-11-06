@@ -13,20 +13,20 @@ pub struct Dialog {
 impl Dialog {
     pub fn new(title: &str) -> Self {
         Self {
-            title: String::from(title),
+            title: title.to_owned(),
             body: None,
         }
     }
 
     pub fn new_with_body(title: &str, body: Option<&str>) -> Self {
         Self {
-            title: String::from(title),
+            title: title.to_owned(),
             body: body.map(String::from),
         }
     }
 
     pub fn update_text(&mut self, title: &str, body: Option<&str>) {
-        self.title = String::from(title);
+        self.title = title.to_owned();
         self.body = body.map(String::from);
     }
 }
@@ -50,7 +50,7 @@ impl Component for Dialog {
             f.render_widget(Clear, area);
             f.render_widget(dialog, area);
         } else {
-            let dialog = Paragraph::new(self.title.to_string())
+            let dialog = Paragraph::new(self.title.clone())
                 .block(Block::default().borders(Borders::ALL))
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center);

@@ -3,9 +3,7 @@ use super::{
     config_provider::ConfigProvider,
     error_handler::ErrorHandler,
 };
-use crate::sender_ext::SenderExt;
 use crossterm::event::{Event, KeyCode};
-use tokio::sync::mpsc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -13,12 +11,12 @@ use tui::{
 };
 
 pub struct App {
-    program_sender: mpsc::Sender<UpdateEvent>,
+    program_sender: flume::Sender<UpdateEvent>,
     error_handler: ErrorHandler,
 }
 
 impl App {
-    pub fn new(program_sender: mpsc::Sender<UpdateEvent>) -> Self {
+    pub fn new(program_sender: flume::Sender<UpdateEvent>) -> Self {
         let error_handler = ErrorHandler::new(program_sender.clone(), |error_sender| {
             ConfigProvider::new(program_sender.clone(), error_sender)
         });
@@ -62,9 +60,11 @@ impl Component for App {
     fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(event) if event.code == KeyCode::Char('q') => {
-                self.program_sender.send_sync(UpdateEvent::Quit)
+                let _ = self.program_sender.send(UpdateEvent::Quit);
             }
-            Event::Resize(_, _) => self.program_sender.send_sync(UpdateEvent::Redraw),
+            Event::Resize(_, _) => {
+                let _ = self.program_sender.send(UpdateEvent::Redraw);
+            }
             _ => self.error_handler.handle_event(event),
         }
     }

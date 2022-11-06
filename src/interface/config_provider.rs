@@ -11,7 +11,6 @@ use crate::config::{
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tui::layout::Rect;
 
 #[derive(Debug)]
@@ -31,18 +30,18 @@ pub struct ConfigProvider {
 
 #[derive(Clone)]
 struct ConfigProviderInner {
-    program_sender: mpsc::Sender<UpdateEvent>,
-    error_sender: mpsc::Sender<ErrorMsg>,
-    config_sender: mpsc::Sender<ConfigProviderMsg>,
+    program_sender: flume::Sender<UpdateEvent>,
+    error_sender: flume::Sender<ErrorMsg>,
+    config_sender: flume::Sender<ConfigProviderMsg>,
     child: Arc<Mutex<Child>>,
 }
 
 impl ConfigProvider {
     pub fn new(
-        program_sender: mpsc::Sender<UpdateEvent>,
-        error_sender: mpsc::Sender<ErrorMsg>,
+        program_sender: flume::Sender<UpdateEvent>,
+        error_sender: flume::Sender<ErrorMsg>,
     ) -> Self {
-        let (config_sender, config_receiver) = mpsc::channel(1);
+        let (config_sender, config_receiver) = flume::bounded(1);
 
         let inner = ConfigProviderInner {
             program_sender: program_sender.clone(),
@@ -59,11 +58,11 @@ impl ConfigProvider {
         config_provider
     }
 
-    fn listen_config_msg(&self, mut config_receiver: mpsc::Receiver<ConfigProviderMsg>) {
+    fn listen_config_msg(&self, config_receiver: flume::Receiver<ConfigProviderMsg>) {
         let inner = self.inner.clone();
 
         tokio::spawn(async move {
-            while let Some(ConfigProviderMsg::Reload) = config_receiver.recv().await {
+            while let Ok(ConfigProviderMsg::Reload) = config_receiver.recv_async().await {
                 Self::reload(inner.clone()).await;
             }
         });
@@ -75,7 +74,7 @@ impl ConfigProvider {
 
         tokio::spawn(async move {
             Self::init_configs_impl(inner).await;
-            let _ = program_sender.send(UpdateEvent::Redraw).await;
+            let _ = program_sender.send_async(UpdateEvent::Redraw).await;
         });
     }
 
@@ -118,10 +117,10 @@ impl ConfigProvider {
             let mut child = inner.child.lock();
             *child = Child::Loading(LoadingIndicator::new(inner.program_sender.clone()));
         }
-        let _ = inner.program_sender.send(UpdateEvent::Redraw).await;
+        let _ = inner.program_sender.send_async(UpdateEvent::Redraw).await;
 
         Self::init_configs_impl(inner.clone()).await;
-        let _ = inner.program_sender.send(UpdateEvent::Redraw).await;
+        let _ = inner.program_sender.send_async(UpdateEvent::Redraw).await;
     }
 }
 
@@ -149,7 +148,7 @@ impl Component for ConfigProvider {
     fn registered_events(&self) -> Vec<(String, String)> {
         let mut events = vec![];
         if let Child::Main(ref mut main_view) = *self.inner.child.lock() {
-            events.push(("r".to_string(), "Reload".to_string()));
+            events.push((String::from("r"), String::from("Reload")));
             events.append(&mut main_view.registered_events());
         }
         events

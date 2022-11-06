@@ -4,14 +4,10 @@ use super::{
     error_handler::ErrorMsg,
     feed_view::FeedView,
 };
-use crate::{
-    config::{common::CommonConfigHandler, config::Video},
-    sender_ext::SenderExt,
-};
+use crate::config::{common::CommonConfigHandler, config::Video};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub enum MainViewMsg {
@@ -24,24 +20,24 @@ pub struct MainView {
     feed: FeedView,
     config: Box<dyn Component + Send>,
 
-    program_sender: mpsc::Sender<UpdateEvent>,
-    config_sender: mpsc::Sender<ConfigProviderMsg>,
+    program_sender: flume::Sender<UpdateEvent>,
+    config_sender: flume::Sender<ConfigProviderMsg>,
 }
 
 impl MainView {
     pub fn new<C, CF>(
-        program_sender: mpsc::Sender<UpdateEvent>,
-        error_sender: mpsc::Sender<ErrorMsg>,
-        config_sender: mpsc::Sender<ConfigProviderMsg>,
+        program_sender: flume::Sender<UpdateEvent>,
+        error_sender: flume::Sender<ErrorMsg>,
+        config_sender: flume::Sender<ConfigProviderMsg>,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
         config_creator: CF,
     ) -> Self
     where
         C: Component + Send + 'static,
-        CF: FnOnce(mpsc::Sender<MainViewMsg>) -> C,
+        CF: FnOnce(flume::Sender<MainViewMsg>) -> C,
     {
-        let (main_sender, main_receiver) = mpsc::channel(10);
+        let (main_sender, main_receiver) = flume::unbounded();
 
         let new_main_view = Self {
             show_config: Arc::new(Mutex::new(false)),
@@ -57,15 +53,15 @@ impl MainView {
         new_main_view
     }
 
-    fn listen_main_view_msg(&self, mut main_receiver: mpsc::Receiver<MainViewMsg>) {
+    fn listen_main_view_msg(&self, main_receiver: flume::Receiver<MainViewMsg>) {
         let show_config = Arc::clone(&self.show_config);
         let config_sender = self.config_sender.clone();
 
         tokio::spawn(async move {
-            while let Some(MainViewMsg::CloseConfig) = main_receiver.recv().await {
+            while let Ok(MainViewMsg::CloseConfig) = main_receiver.recv_async().await {
                 let mut show_config = show_config.lock();
                 *show_config = false;
-                config_sender.send_sync(ConfigProviderMsg::Reload);
+                let _ = config_sender.send(ConfigProviderMsg::Reload);
             }
         });
     }
@@ -100,7 +96,7 @@ impl Component for MainView {
         } else if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
             let mut show_config = self.show_config.lock();
             *show_config = true;
-            self.program_sender.send_sync(UpdateEvent::Redraw);
+            let _ = self.program_sender.send(UpdateEvent::Redraw);
         } else {
             self.feed.handle_event(event);
         }

@@ -5,7 +5,7 @@ use super::{
 use futures_timer::Delay;
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
-use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tokio::task::JoinHandle;
 use tui::layout::Rect;
 
 pub struct LoadingIndicator {
@@ -15,7 +15,7 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
-    pub fn new(program_sender: Sender<UpdateEvent>) -> Self {
+    pub fn new(program_sender: flume::Sender<UpdateEvent>) -> Self {
         let dots = Arc::new(Mutex::new(0));
 
         let dots_clone = Arc::clone(&dots);
@@ -26,7 +26,7 @@ impl LoadingIndicator {
                     let mut dots = dots_clone.lock();
                     *dots = (*dots + 1) % 4;
                 }
-                let _ = program_sender.send(UpdateEvent::Redraw).await;
+                let _ = program_sender.send_async(UpdateEvent::Redraw).await;
             }
         });
 
