@@ -20,7 +20,7 @@ pub struct RssConfigView {
     redraw_sender: flume::Sender<()>,
     error_sender: flume::Sender<ErrorMsg>,
     main_sender: flume::Sender<MainViewMsg>,
-    rss_config: RssConfigHandler,
+    rss_config: Arc<RssConfigHandler>,
     selected: usize,
     loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
 }
@@ -36,7 +36,7 @@ impl RssConfigView {
             redraw_sender,
             error_sender,
             main_sender,
-            rss_config,
+            rss_config: Arc::new(rss_config),
             selected: 0,
             loading_indicator: Arc::new(Mutex::new(None)),
         }
@@ -69,12 +69,12 @@ impl RssConfigView {
             .url
             .clone();
 
-        let remove_receiver = self.rss_config.remove_feed(&url);
+        let rss_config = Arc::clone(&self.rss_config);
         let redraw_sender = self.redraw_sender.clone();
         let error_sender = self.error_sender.clone();
 
         tokio::spawn(async move {
-            let remove_result = remove_receiver.await.unwrap();
+            let remove_result = rss_config.remove_feed(&url).await;
             error_sender
                 .run_or_send_async(remove_result, true, |_| async {
                     let _ = redraw_sender.send_async(()).await;
@@ -90,7 +90,8 @@ impl RssConfigView {
         }
         let _ = self.redraw_sender.send(());
 
-        let add_receiver = self.rss_config.add_feed(url);
+        let url = url.to_owned();
+        let rss_config = Arc::clone(&self.rss_config);
         let redraw_sender = self.redraw_sender.clone();
         let error_sender = self.error_sender.clone();
         let loading_indicator = Arc::clone(&self.loading_indicator);
@@ -101,7 +102,7 @@ impl RssConfigView {
                 *loading_indicator = None;
             }
 
-            let add_result = add_receiver.await.unwrap();
+            let add_result = rss_config.add_feed(&url).await;
             error_sender
                 .run_or_send_async(add_result, true, |_| async {
                     let _ = redraw_sender.send_async(()).await;

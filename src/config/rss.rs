@@ -1,14 +1,15 @@
 use super::file_handler::ConfigFileHandler;
 use crate::config::{
-    config::{Config, ConfigResult, Video},
+    config::{Config, Video},
     error::ConfigError,
 };
 use async_trait::async_trait;
 use atom_syndication::Entry;
+use futures::future;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, future::Future, sync::Arc};
-use tokio::{fs, sync::oneshot};
+use std::{collections::BTreeSet, sync::Arc};
+use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
 
@@ -36,13 +37,20 @@ pub struct RssConfigHandler {
 }
 
 impl RssConfigHandler {
-    pub fn add_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
+    pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
         let url = url.to_owned();
-        self.modify(|mut data| async move {
-            Self::fetch_feed(&url, &mut data).await?;
+
+        let (feed, videos) = Self::fetch_feed(&url).await?;
+        let new_config = {
+            let mut data = self.data.lock();
             data.config.feeds.push(url);
-            Ok(data)
-        })
+            data.feeds.push(feed);
+            data.videos.extend(videos);
+
+            data.config.clone()
+        };
+
+        self.save(&new_config).await
     }
 
     pub async fn import_youtube(&self, path: String) {
@@ -69,22 +77,22 @@ impl RssConfigHandler {
             data.config.clone()
         };
 
-        let file_handler = self.file_handler.lock().await;
-        file_handler
-            .write(&new_config)
+        self.save(&new_config)
             .await
             .expect("Failed to write to config file");
-
         println!("Done.");
     }
 
-    pub fn remove_feed(&self, url: &str) -> oneshot::Receiver<ConfigResult> {
-        let url = url.to_owned();
-        self.modify(|mut data| async move {
-            data.config.feeds.retain(|feed| feed != &url);
+    pub async fn remove_feed(&self, url: &str) -> Result<(), ConfigError> {
+        let new_config = {
+            let mut data = self.data.lock();
+            data.config.feeds.retain(|feed| feed != url);
             data.feeds.retain(|feed| feed.url != url);
-            Ok(data)
-        })
+
+            data.config.clone()
+        };
+
+        self.save(&new_config).await
     }
 
     pub fn feeds(&self) -> Vec<Feed> {
@@ -104,17 +112,15 @@ impl RssConfigHandler {
             .map_err(|error| ConfigError::ReadFeed { error })
     }
 
-    async fn fetch_feed(url: &str, data: &mut RssConfigHandlerData) -> Result<(), ConfigError> {
+    async fn fetch_feed(url: &str) -> Result<(Feed, Vec<Video>), ConfigError> {
         let rss = Self::fetch_rss(url).await?;
         let videos = Self::parse_videos(&rss).await?;
-
-        data.feeds.push(Feed {
+        let feed = Feed {
             title: rss.title().to_string(),
             url: url.to_owned(),
-        });
-        data.videos.extend(videos);
+        };
 
-        Ok(())
+        Ok((feed, videos))
     }
 
     async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, ConfigError> {
@@ -162,47 +168,10 @@ impl RssConfigHandler {
         })
     }
 
-    fn modify<R, F>(&self, f: F) -> oneshot::Receiver<ConfigResult>
-    where
-        R: Future<Output = Result<RssConfigHandlerData, ConfigError>> + Send,
-        F: FnOnce(RssConfigHandlerData) -> R + Send + 'static,
-    {
-        let (sender, receiver) = oneshot::channel();
-        let data = Arc::clone(&self.data);
-        let file_handler = Arc::clone(&self.file_handler);
-
-        tokio::spawn(async move {
-            let new_data = Self::modify_impl(data, file_handler, f).await;
-            let _ = sender.send(new_data);
-        });
-
-        receiver
-    }
-
-    async fn modify_impl<R, F>(
-        data: Arc<Mutex<RssConfigHandlerData>>,
-        file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler>>,
-        f: F,
-    ) -> ConfigResult
-    where
-        R: Future<Output = Result<RssConfigHandlerData, ConfigError>> + Send,
-        F: FnOnce(RssConfigHandlerData) -> R + Send,
-    {
-        let old_data = {
-            let data = data.lock();
-            data.clone()
-        };
-
-        let new_data = f(old_data).await?;
-        {
-            let mut data = data.lock();
-            *data = new_data.clone();
-        };
-
-        let file_handler = file_handler.lock().await;
-        file_handler.write(&new_data.config).await?;
-
-        Ok(new_data.videos.into_iter().collect())
+    async fn save(&self, config: &RssConfig) -> Result<(), ConfigError> {
+        let file_handler = self.file_handler.lock().await;
+        file_handler.write(config).await?;
+        Ok(())
     }
 }
 
@@ -225,23 +194,28 @@ impl Config for RssConfigHandler {
         })
     }
 
-    fn fetch(&self) -> oneshot::Receiver<ConfigResult> {
-        {
+    async fn fetch(&self) -> Result<(), ConfigError> {
+        let feeds = {
             let mut data = self.data.lock();
             data.feeds.clear();
             data.videos.clear();
+            data.config.feeds.clone()
+        };
+
+        let feed_data = future::join_all(feeds.iter().map(|url| Self::fetch_feed(url))).await;
+        let mut data = self.data.lock();
+        for result in feed_data {
+            match result {
+                Ok((feed, videos)) => {
+                    data.feeds.push(feed);
+                    data.videos.extend(videos);
+                }
+                Err(ConfigError::ReadFeed { .. }) => (),
+                Err(err) => return Err(err),
+            }
         }
 
-        self.modify(|mut data| async {
-            for url in data.config.clone().feeds.iter() {
-                match Self::fetch_feed(url, &mut data).await {
-                    Ok(_) | Err(ConfigError::ReadFeed { .. }) => (),
-                    Err(error) => return Err(error),
-                };
-            }
-
-            Ok(data)
-        })
+        Ok(())
     }
 
     fn videos(&self) -> Vec<Video> {

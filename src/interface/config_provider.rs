@@ -104,7 +104,7 @@ impl ConfigProvider {
     async fn load_configs() -> Result<(CommonConfigHandler, RssConfigHandler), ConfigError> {
         let common_config = CommonConfigHandler::load().await?;
         let config = RssConfigHandler::load().await?;
-        let _ = config.fetch().await.unwrap()?;
+        config.fetch().await?;
 
         Ok((common_config, config))
     }

@@ -1,9 +1,6 @@
 use crate::config::error::ConfigError;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
-use tokio::sync::oneshot;
-
-pub type ConfigResult = Result<Vec<Video>, ConfigError>;
 
 #[async_trait]
 pub trait Config {
@@ -11,7 +8,7 @@ pub trait Config {
     where
         Self: Sized;
 
-    fn fetch(&self) -> oneshot::Receiver<ConfigResult>;
+    async fn fetch(&self) -> Result<(), ConfigError>;
     fn videos(&self) -> Vec<Video>;
 }
 
