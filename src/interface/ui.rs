@@ -1,8 +1,17 @@
 use super::component::{Backend, Component};
 use crossterm::event::EventStream;
+use err_derive::Error;
 use tokio::select;
 use tokio_stream::StreamExt;
 use tui::Terminal;
+
+#[derive(Debug, Error)]
+pub enum UiError {
+    #[error(display = "Failed to perform initial draw of component tree")]
+    Draw(#[error(from)] std::io::Error),
+    #[error(display = "Failed to send redraw message")]
+    ReDraw(#[error(from)] flume::SendError<()>),
+}
 
 #[derive(Clone)]
 pub struct ProgramActions {
@@ -29,7 +38,7 @@ impl ProgramActions {
     }
 }
 
-pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F)
+pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F) -> Result<(), UiError>
 where
     C: Component,
     F: FnOnce(ProgramActions) -> C,
@@ -44,10 +53,7 @@ where
     };
 
     let mut root = creator(program_actions.clone());
-    program_actions
-        .redraw_async()
-        .await
-        .expect("Failed to render");
+    program_actions.redraw_async().await?;
     loop {
         select! {
             event = event_reader.next() => {
@@ -61,15 +67,19 @@ where
             event = redraw_receiver.recv_async() => {
                 if event.is_ok() {
                     redraw_receiver.drain();
-                    perform_draw(terminal, &mut root);
+                    perform_draw(terminal, &mut root)?;
                 }
             },
         };
     }
+
+    Ok(())
 }
 
-fn perform_draw(terminal: &mut Terminal<Backend>, root: &mut impl Component) {
-    terminal
-        .draw(|f| root.draw(f, f.size()))
-        .expect("Failed to draw");
+fn perform_draw(
+    terminal: &mut Terminal<Backend>,
+    root: &mut impl Component,
+) -> Result<(), UiError> {
+    terminal.draw(|f| root.draw(f, f.size()))?;
+    Ok(())
 }

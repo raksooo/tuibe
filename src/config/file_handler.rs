@@ -25,9 +25,7 @@ impl ConfigFileHandler {
             Err(error) => match error.kind() {
                 io::ErrorKind::NotFound => {
                     let config = Default::default();
-                    Self::write_to_path(&self.path, &config)
-                        .await
-                        .map_err(|_| ConfigError::WriteConfigFile)?;
+                    Self::write_to_path(&self.path, &config).await?;
                     Ok(config)
                 }
                 _ => Err(ConfigError::ReadConfigFile),
@@ -46,16 +44,14 @@ impl ConfigFileHandler {
     where
         C: Serialize,
     {
-        let toml = toml::to_string(config).map_err(|_| ConfigError::SerializeConfig)?;
+        let toml = toml::to_string(config)?;
         let mut file = File::create(path)
             .await
-            .map_err(|_| ConfigError::CreateConfigFile)?;
+            .map_err(ConfigError::CreateConfigFile)?;
         file.write(toml.as_bytes())
             .await
-            .map_err(|_| ConfigError::WriteConfigFile)?;
-        file.flush()
-            .await
-            .map_err(|_| ConfigError::WriteConfigFile)?;
+            .map_err(ConfigError::WriteConfigFile)?;
+        file.flush().await.map_err(ConfigError::WriteConfigFile)?;
         Ok(())
     }
 
@@ -63,7 +59,7 @@ impl ConfigFileHandler {
         let dir = Self::find_config_dir()?;
         fs::create_dir_all(&dir)
             .await
-            .map_err(|_| ConfigError::CreateConfigDir)?;
+            .map_err(ConfigError::CreateConfigDir)?;
 
         Ok(dir)
     }
@@ -74,7 +70,7 @@ impl ConfigFileHandler {
         match std::env::var("XDG_CONFIG_HOME") {
             Ok(config_dir) => path.push(config_dir),
             _ => {
-                let home = std::env::var("HOME").map_err(|_| ConfigError::FindConfigDir)?;
+                let home = std::env::var("HOME")?;
                 path.push(home);
                 path.push(".config");
             }

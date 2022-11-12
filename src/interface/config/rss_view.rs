@@ -51,6 +51,7 @@ impl RssConfigView {
     }
 
     fn remove_selected(&mut self) {
+        // selected is always within the bounds of feeds
         let url = self
             .rss_config
             .feeds()

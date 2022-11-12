@@ -53,23 +53,26 @@ impl RssConfigHandler {
         self.save(&new_config).await
     }
 
-    pub async fn import_youtube(&self, path: String) {
+    pub async fn import_youtube(&self, path: String) -> Result<(), ConfigError> {
         println!("Importing subscriptions...");
         let content = fs::read_to_string(&path)
             .await
-            .expect("Failed to read file");
+            .map_err(|_| ConfigError::ReadConfigFile)?;
         let mut urls: Vec<String> = content
             .trim()
             .split('\n')
             .skip(1)
             .map(|line| {
-                let channel_id = line.split(',').next().expect("Import failed");
-                format!(
+                let channel_id = line
+                    .split(',')
+                    .next()
+                    .ok_or(ConfigError::ParseYoutubeTakeout)?;
+                Ok(format!(
                     "https://www.youtube.com/feeds/videos.xml?channel_id={}",
                     channel_id
-                )
+                ))
             })
-            .collect();
+            .collect::<Result<Vec<_>, ConfigError>>()?;
 
         let new_config = {
             let mut data = self.data.lock();
@@ -77,10 +80,7 @@ impl RssConfigHandler {
             data.config.clone()
         };
 
-        self.save(&new_config)
-            .await
-            .expect("Failed to write to config file");
-        println!("Done.");
+        self.save(&new_config).await
     }
 
     pub async fn remove_feed(&self, url: &str) -> Result<(), ConfigError> {
@@ -101,15 +101,8 @@ impl RssConfigHandler {
     }
 
     async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, ConfigError> {
-        let content = reqwest::get(url)
-            .await
-            .map_err(|_| ConfigError::FetchFeed)?
-            .bytes()
-            .await
-            .map_err(|_| ConfigError::FetchFeed)?;
-
-        atom_syndication::Feed::read_from(&content[..])
-            .map_err(|error| ConfigError::ReadFeed { error })
+        let content = reqwest::get(url).await?.bytes().await?;
+        Ok(atom_syndication::Feed::read_from(&content[..])?)
     }
 
     async fn fetch_feed(url: &str) -> Result<(Feed, Vec<Video>), ConfigError> {
@@ -147,8 +140,7 @@ impl RssConfigHandler {
             .and_then(|extension| extension.children().get("description"))
             .and_then(|description| description.first())
             .and_then(|description| description.value())
-            .ok_or("")
-            .map_err(|_| ConfigError::ParseVideo)?
+            .unwrap_or("")
             .to_string();
 
         let url = entry

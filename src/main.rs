@@ -29,7 +29,9 @@ async fn main() {
             .await
             .expect("Failed to load config")
             .import_youtube(path)
-            .await;
+            .await
+            .expect("Failed to import youtube takeout");
+        println!("Done.");
     } else {
         run().await;
     }
@@ -51,7 +53,9 @@ async fn run() {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).expect("Failed to setup interface");
 
-    ui::create(&mut terminal, App::new).await;
+    ui::create(&mut terminal, App::new)
+        .await
+        .expect("Failed to run ui");
 
     disable_raw_mode().expect("Failed to clean up");
     execute!(

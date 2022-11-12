@@ -3,35 +3,35 @@ use err_derive::Error;
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error(display = "Failed to find config dir")]
-    FindConfigDir,
+    FindConfigDir(#[error(from)] std::env::VarError),
 
     #[error(display = "Failed to read config file")]
     ReadConfigFile,
 
-    #[error(display = "Failed to parse config file: {}", error)]
-    ParseConfigFile {
-        #[error(from)]
-        error: toml::de::Error,
-    },
+    #[error(display = "Failed to parse config file: {}", _0)]
+    ParseConfigFile(#[error(from)] toml::de::Error),
 
     #[error(display = "Failed to create config directory")]
-    CreateConfigDir,
+    CreateConfigDir(#[error(source, no_from)] std::io::Error),
 
     #[error(display = "Failed to create/truncate config file")]
-    CreateConfigFile,
+    CreateConfigFile(#[error(source, no_from)] std::io::Error),
 
     #[error(display = "Failed to serialize config")]
-    SerializeConfig,
+    SerializeConfig(#[error(from)] toml::ser::Error),
 
     #[error(display = "Failed to write to config file")]
-    WriteConfigFile,
+    WriteConfigFile(#[error(source, no_from)] std::io::Error),
 
     #[error(display = "Failed to fetch RSS feed")]
-    FetchFeed,
+    FetchFeed(#[error(from)] reqwest::Error),
 
-    #[error(display = "Failed to read RSS feed: {}", error)]
-    ReadFeed { error: atom_syndication::Error },
+    #[error(display = "Failed to read RSS feed: {}", _0)]
+    ReadFeed(#[error(from)] atom_syndication::Error),
 
     #[error(display = "Failed to parse video")]
     ParseVideo,
+
+    #[error(display = "Failed to parse YouTube takeout")]
+    ParseYoutubeTakeout,
 }
