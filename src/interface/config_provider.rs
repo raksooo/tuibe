@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     config::rss_view::RssConfigView,
-    error_handler::{ErrorMsg, ErrorSenderExt},
+    error_handler::{ErrorHandlerActions, ErrorMsg},
     loading_indicator::LoadingIndicator,
     main_view::MainView,
 };
@@ -9,13 +9,52 @@ use crate::config::{
     common::CommonConfigHandler, config::Config, error::ConfigError, rss::RssConfigHandler,
 };
 use crossterm::event::{Event, KeyCode};
+use delegate::delegate;
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 use tui::layout::Rect;
 
 #[derive(Debug)]
 pub enum ConfigProviderMsg {
     Reload,
+}
+
+#[derive(Clone)]
+pub struct ConfigProviderActions {
+    error_handler_actions: ErrorHandlerActions,
+    config_sender: flume::Sender<ConfigProviderMsg>,
+}
+
+#[allow(dead_code)]
+impl ConfigProviderActions {
+    pub fn reload_config(&self) {
+        self.error_handler_actions
+            .handle_result(self.config_sender.send(ConfigProviderMsg::Reload));
+    }
+
+    pub async fn reload_config_async(&self) {
+        self.error_handler_actions
+            .handle_result_async(
+                self.config_sender
+                    .send_async(ConfigProviderMsg::Reload)
+                    .await,
+            )
+            .await;
+    }
+
+    delegate! {
+        to self.error_handler_actions {
+            pub fn error(&self, error: ErrorMsg);
+            pub async fn error_async(&self, error: ErrorMsg);
+            pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
+            pub async fn redraw_or_error_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
+            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>);
+            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>);
+            pub fn redraw(&self);
+            pub async fn redraw_async(&self);
+            pub fn redraw_fn(&self) -> impl Fn();
+        }
+    }
 }
 
 enum Child {
@@ -25,80 +64,66 @@ enum Child {
 
 #[derive(Clone)]
 pub struct ConfigProvider {
-    inner: ConfigProviderInner,
-}
-
-#[derive(Clone)]
-struct ConfigProviderInner {
-    redraw_sender: flume::Sender<()>,
-    error_sender: flume::Sender<ErrorMsg>,
-    config_sender: flume::Sender<ConfigProviderMsg>,
+    actions: ConfigProviderActions,
     child: Arc<Mutex<Child>>,
 }
 
 impl ConfigProvider {
-    pub fn new(redraw_sender: flume::Sender<()>, error_sender: flume::Sender<ErrorMsg>) -> Self {
+    pub fn new(error_handler_actions: ErrorHandlerActions) -> Self {
         let (config_sender, config_receiver) = flume::bounded(1);
-
-        let inner = ConfigProviderInner {
-            redraw_sender: redraw_sender.clone(),
-            error_sender,
+        let actions = ConfigProviderActions {
+            error_handler_actions,
             config_sender,
+        };
+
+        let mut config_provider = Self {
+            actions: actions.clone(),
             child: Arc::new(Mutex::new(Child::Loading(LoadingIndicator::new(
-                redraw_sender,
+                actions.redraw_fn(),
             )))),
         };
 
-        let mut config_provider = Self { inner };
         config_provider.listen_config_msg(config_receiver);
         config_provider.init_configs();
         config_provider
     }
 
     fn listen_config_msg(&self, config_receiver: flume::Receiver<ConfigProviderMsg>) {
-        let inner = self.inner.clone();
+        let actions = self.actions.clone();
+        let child = self.child.clone();
 
         tokio::spawn(async move {
             while let Ok(ConfigProviderMsg::Reload) = config_receiver.recv_async().await {
-                Self::reload(inner.clone()).await;
+                Self::reload(actions.clone(), child.clone()).await;
             }
         });
     }
 
     fn init_configs(&mut self) {
-        let inner = self.inner.clone();
-        let redraw_sender = inner.redraw_sender.clone();
+        let actions = self.actions.clone();
+        let child = self.child.clone();
 
         tokio::spawn(async move {
-            Self::init_configs_impl(inner).await;
-            let _ = redraw_sender.send_async(()).await;
+            let init_result = Self::init_configs_impl(actions.clone(), child).await;
+            actions.redraw_or_error_async(init_result, false).await;
         });
     }
 
-    async fn init_configs_impl(inner: ConfigProviderInner) {
-        inner.error_sender.clone().run_or_send(
-            Self::load_configs().await,
-            false,
-            move |(common_config, config)| {
-                let videos = config.videos();
+    async fn init_configs_impl(
+        actions: ConfigProviderActions,
+        child: Arc<Mutex<Child>>,
+    ) -> Result<(), ConfigError> {
+        let (common_config, config) = Self::load_configs().await?;
 
-                let redraw_sender = inner.redraw_sender.clone();
-                let error_sender = inner.error_sender.clone();
-                let config_view_creator = |main_sender| {
-                    RssConfigView::new(redraw_sender, error_sender, main_sender, config)
-                };
+        let mut child = child.lock();
+        *child = Child::Main(MainView::new(
+            actions,
+            common_config,
+            config.videos(),
+            |actions| RssConfigView::new(actions, config),
+        ));
 
-                let mut child = inner.child.lock();
-                *child = Child::Main(MainView::new(
-                    inner.redraw_sender,
-                    inner.error_sender,
-                    inner.config_sender,
-                    common_config,
-                    videos,
-                    config_view_creator,
-                ));
-            },
-        );
+        Ok(())
     }
 
     async fn load_configs() -> Result<(CommonConfigHandler, RssConfigHandler), ConfigError> {
@@ -109,21 +134,21 @@ impl ConfigProvider {
         Ok((common_config, config))
     }
 
-    async fn reload(inner: ConfigProviderInner) {
+    async fn reload(actions: ConfigProviderActions, child: Arc<Mutex<Child>>) {
         {
-            let mut child = inner.child.lock();
-            *child = Child::Loading(LoadingIndicator::new(inner.redraw_sender.clone()));
+            let mut child = child.lock();
+            *child = Child::Loading(LoadingIndicator::new(actions.redraw_fn()));
         }
-        let _ = inner.redraw_sender.send_async(()).await;
+        actions.redraw_async().await;
 
-        Self::init_configs_impl(inner.clone()).await;
-        let _ = inner.redraw_sender.send_async(()).await;
+        let init_result = Self::init_configs_impl(actions.clone(), child).await;
+        actions.redraw_or_error_async(init_result, false).await;
     }
 }
 
 impl Component for ConfigProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut child = self.inner.child.lock();
+        let mut child = self.child.lock();
         match *child {
             Child::Loading(ref mut loading_indicator) => &loading_indicator.draw(f, area),
             Child::Main(ref mut main_view) => &main_view.draw(f, area),
@@ -131,11 +156,11 @@ impl Component for ConfigProvider {
     }
 
     fn handle_event(&mut self, event: Event) {
-        let mut child = self.inner.child.lock();
+        let mut child = self.child.lock();
         if let Child::Main(ref mut main_view) = *child {
             match event {
                 Event::Key(event) if event.code == KeyCode::Char('r') => {
-                    tokio::spawn(Self::reload(self.inner.clone()));
+                    tokio::spawn(Self::reload(self.actions.clone(), self.child.clone()));
                 }
                 event => main_view.handle_event(event),
             }
@@ -144,7 +169,7 @@ impl Component for ConfigProvider {
 
     fn registered_events(&self) -> Vec<(String, String)> {
         let mut events = vec![];
-        if let Child::Main(ref mut main_view) = *self.inner.child.lock() {
+        if let Child::Main(ref mut main_view) = *self.child.lock() {
             events.push((String::from("r"), String::from("Reload")));
             events.append(&mut main_view.registered_events());
         }

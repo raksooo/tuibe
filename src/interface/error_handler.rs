@@ -2,10 +2,10 @@ use super::{
     component::{Component, Frame},
     dialog::Dialog,
 };
-use async_trait::async_trait;
+use crate::ui::ProgramActions;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
-use std::{fmt::Display, future::Future, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 use tui::layout::Rect;
 
 pub struct ErrorMsg {
@@ -13,23 +13,111 @@ pub struct ErrorMsg {
     pub ignorable: bool,
 }
 
+#[derive(Clone)]
+pub struct ErrorHandlerActions {
+    program_actions: ProgramActions,
+    error_sender: flume::Sender<ErrorMsg>,
+}
+
+#[allow(dead_code)]
+impl ErrorHandlerActions {
+    pub fn error(&self, error: ErrorMsg) {
+        self.error_sender
+            .send(error)
+            .expect("Failed to send error message");
+    }
+
+    pub async fn error_async(&self, error: ErrorMsg) {
+        self.error_sender
+            .send_async(error)
+            .await
+            .expect("Failed to send error message");
+    }
+
+    pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool) {
+        match result {
+            Ok(_) => self.redraw(),
+            Err(error) => self.error(ErrorMsg {
+                message: error.to_string(),
+                ignorable,
+            }),
+        }
+    }
+
+    pub async fn redraw_or_error_async<T, E: Display>(
+        &self,
+        result: Result<T, E>,
+        ignorable: bool,
+    ) {
+        match result {
+            Ok(_) => self.redraw_async().await,
+            Err(error) => {
+                self.error_async(ErrorMsg {
+                    message: error.to_string(),
+                    ignorable,
+                })
+                .await
+            }
+        }
+    }
+
+    pub fn handle_result<T, E: Display>(&self, result: Result<T, E>) {
+        if let Err(error) = result {
+            self.error(ErrorMsg {
+                message: error.to_string(),
+                ignorable: false,
+            });
+        }
+    }
+
+    pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>) {
+        if let Err(error) = result {
+            self.error_async(ErrorMsg {
+                message: error.to_string(),
+                ignorable: false,
+            })
+            .await;
+        }
+    }
+
+    pub fn redraw_fn(&self) -> impl Fn() {
+        let clone = self.clone();
+        move || clone.redraw()
+    }
+
+    // Override program actions by wrapping them in error handling.
+    pub fn redraw(&self) {
+        self.handle_result(self.program_actions.redraw());
+    }
+
+    pub async fn redraw_async(&self) {
+        self.handle_result_async(self.program_actions.redraw_async().await)
+            .await;
+    }
+}
+
 pub struct ErrorHandler {
-    redraw_sender: flume::Sender<()>,
+    actions: ErrorHandlerActions,
     child: Box<dyn Component>,
     error: Arc<Mutex<Option<ErrorMsg>>>,
 }
 
 impl ErrorHandler {
-    pub fn new<C, CF>(redraw_sender: flume::Sender<()>, child_creator: CF) -> Self
+    pub fn new<C, CF>(program_actions: ProgramActions, child_creator: CF) -> Self
     where
         C: Component + 'static,
-        CF: FnOnce(flume::Sender<ErrorMsg>) -> C,
+        CF: FnOnce(ErrorHandlerActions) -> C,
     {
         let (error_sender, error_receiver) = flume::unbounded();
 
+        let actions = ErrorHandlerActions {
+            program_actions,
+            error_sender,
+        };
+
         let new_error_handler = Self {
-            redraw_sender,
-            child: Box::new(child_creator(error_sender)),
+            actions: actions.clone(),
+            child: Box::new(child_creator(actions)),
             error: Arc::new(Mutex::new(None)),
         };
 
@@ -38,7 +126,7 @@ impl ErrorHandler {
     }
 
     fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMsg>) {
-        let redraw_sender = self.redraw_sender.clone();
+        let actions = self.actions.clone();
         let error = Arc::clone(&self.error);
         tokio::spawn(async move {
             while let Ok(new_error) = error_receiver.recv_async().await {
@@ -46,7 +134,7 @@ impl ErrorHandler {
                     let mut error = error.lock();
                     *error = Some(new_error);
                 }
-                let _ = redraw_sender.send(());
+                actions.redraw_async().await;
             }
         });
     }
@@ -66,7 +154,7 @@ impl Component for ErrorHandler {
         if let Some(ErrorMsg { ignorable, .. }) = *error {
             if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 *error = None;
-                let _ = self.redraw_sender.send(());
+                self.actions.redraw();
             }
         } else {
             self.child.handle_event(event);
@@ -83,62 +171,6 @@ impl Component for ErrorHandler {
             }
         } else {
             self.child.registered_events()
-        }
-    }
-}
-
-#[async_trait]
-pub trait ErrorSenderExt {
-    fn run_or_send<T, E, F>(&self, result: Result<T, E>, ignorable: bool, f: F)
-    where
-        T: Send,
-        E: Display,
-        F: FnOnce(T);
-
-    async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
-    where
-        T: Send,
-        E: Display + Send + Sync,
-        R: Future<Output = ()> + Send,
-        F: FnOnce(T) -> R + Send;
-}
-
-#[async_trait]
-impl ErrorSenderExt for flume::Sender<ErrorMsg> {
-    fn run_or_send<T, E, F>(&self, result: Result<T, E>, ignorable: bool, f: F)
-    where
-        T: Send,
-        E: Display,
-        F: FnOnce(T),
-    {
-        match result {
-            Ok(value) => f(value),
-            Err(err) => {
-                let _ = self.send(ErrorMsg {
-                    message: err.to_string(),
-                    ignorable,
-                });
-            }
-        }
-    }
-
-    async fn run_or_send_async<T, E, F, R>(&self, result: Result<T, E>, ignorable: bool, f: F)
-    where
-        T: Send,
-        E: Display + Send + Sync,
-        R: Future<Output = ()> + Send,
-        F: FnOnce(T) -> R + Send,
-    {
-        match result {
-            Ok(value) => f(value).await,
-            Err(err) => {
-                let _ = self
-                    .send_async(ErrorMsg {
-                        message: err.to_string(),
-                        ignorable,
-                    })
-                    .await;
-            }
         }
     }
 }

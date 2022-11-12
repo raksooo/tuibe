@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
-    error_handler::{ErrorMsg, ErrorSenderExt},
+    main_view::MainViewActions,
 };
 use crate::config::{common::CommonConfigHandler, config::Video};
 use crossterm::event::{Event, KeyCode, KeyEvent};
@@ -20,8 +20,7 @@ struct VideoListItem {
 }
 
 pub struct FeedView {
-    redraw_sender: flume::Sender<()>,
-    error_sender: flume::Sender<ErrorMsg>,
+    actions: MainViewActions,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
     videos: Vec<VideoListItem>,
@@ -30,8 +29,7 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(
-        redraw_sender: flume::Sender<()>,
-        error_sender: flume::Sender<ErrorMsg>,
+        actions: MainViewActions,
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
     ) -> Self {
@@ -45,8 +43,7 @@ impl FeedView {
             .collect();
 
         Self {
-            redraw_sender,
-            error_sender,
+            actions,
             common_config: Arc::new(common_config),
             playing: Arc::new(Mutex::new(false)),
             videos,
@@ -57,26 +54,26 @@ impl FeedView {
     fn move_up(&mut self) {
         if self.current_item > 0 {
             self.current_item -= 1;
-            let _ = self.redraw_sender.send(());
+            self.actions.redraw();
         }
     }
 
     fn move_top(&mut self) {
         self.current_item = 0;
-        let _ = self.redraw_sender.send(());
+        self.actions.redraw();
     }
 
     fn move_down(&mut self) {
         if self.current_item + 1 < self.videos.len() {
             self.current_item += 1;
-            let _ = self.redraw_sender.send(());
+            self.actions.redraw();
         }
     }
 
     fn toggle_current_item(&mut self) {
         if let Some(video) = self.videos.get_mut(self.current_item) {
             video.selected = !video.selected;
-            let _ = self.redraw_sender.send(());
+            self.actions.redraw();
         }
     }
 
@@ -108,12 +105,11 @@ impl FeedView {
                 let mut playing = self.playing.lock();
                 *playing = true;
             }
-            let _ = self.redraw_sender.send(());
+            self.actions.redraw();
 
             let player = self.get_player();
             let playing = Arc::clone(&self.playing);
-            let redraw_sender = self.redraw_sender.clone();
-            let error_sender = self.error_sender.clone();
+            let actions = self.actions.clone();
             tokio::spawn(async move {
                 let videos = selected_videos.iter().map(|video| video.url.clone());
                 let play_result = Command::new(player)
@@ -123,15 +119,11 @@ impl FeedView {
                     .status()
                     .await;
 
-                error_sender
-                    .run_or_send_async(play_result, true, |_| async {
-                        {
-                            let mut playing = playing.lock();
-                            *playing = false;
-                        }
-                        let _ = redraw_sender.send_async(()).await;
-                    })
-                    .await;
+                {
+                    let mut playing = playing.lock();
+                    *playing = false;
+                }
+                actions.redraw_or_error_async(play_result, true).await;
             });
         }
     }
@@ -216,7 +208,7 @@ impl Component for FeedView {
             if event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 let mut playing = self.playing.lock();
                 *playing = false;
-                let _ = self.redraw_sender.send(());
+                self.actions.redraw();
             }
         } else if let Event::Key(event) = event {
             match event.code {

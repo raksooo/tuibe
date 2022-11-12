@@ -3,6 +3,7 @@ use super::{
     config_provider::ConfigProvider,
     error_handler::ErrorHandler,
 };
+use crate::ui::ProgramActions;
 use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,
@@ -11,20 +12,16 @@ use tui::{
 };
 
 pub struct App {
-    quit_sender: flume::Sender<()>,
-    redraw_sender: flume::Sender<()>,
+    actions: ProgramActions,
     error_handler: ErrorHandler,
 }
 
 impl App {
-    pub fn new(quit_sender: flume::Sender<()>, redraw_sender: flume::Sender<()>) -> Self {
-        let error_handler = ErrorHandler::new(redraw_sender.clone(), |error_sender| {
-            ConfigProvider::new(redraw_sender.clone(), error_sender)
-        });
+    pub fn new(actions: ProgramActions) -> Self {
+        let error_handler = ErrorHandler::new(actions.clone(), ConfigProvider::new);
 
         Self {
-            quit_sender,
-            redraw_sender,
+            actions,
             error_handler,
         }
     }
@@ -62,10 +59,10 @@ impl Component for App {
     fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(event) if event.code == KeyCode::Char('q') => {
-                let _ = self.quit_sender.send(());
+                self.actions.quit().expect("Failed to quit");
             }
             Event::Resize(_, _) => {
-                let _ = self.redraw_sender.send(());
+                let _ = self.actions.redraw();
             }
             _ => self.error_handler.handle_event(event),
         }

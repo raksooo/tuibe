@@ -4,20 +4,50 @@ use tokio::select;
 use tokio_stream::StreamExt;
 use tui::Terminal;
 
+#[derive(Clone)]
+pub struct ProgramActions {
+    quit_sender: flume::Sender<()>,
+    redraw_sender: flume::Sender<()>,
+}
+
+#[allow(dead_code)]
+impl ProgramActions {
+    pub fn quit(&self) -> Result<(), flume::SendError<()>> {
+        self.quit_sender.send(())
+    }
+
+    pub async fn quit_async(&self) -> Result<(), flume::SendError<()>> {
+        self.quit_sender.send_async(()).await
+    }
+
+    pub fn redraw(&self) -> Result<(), flume::SendError<()>> {
+        self.redraw_sender.send(())
+    }
+
+    pub async fn redraw_async(&self) -> Result<(), flume::SendError<()>> {
+        self.redraw_sender.send_async(()).await
+    }
+}
+
 pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F)
 where
     C: Component,
-    F: FnOnce(flume::Sender<()>, flume::Sender<()>) -> C,
+    F: FnOnce(ProgramActions) -> C,
 {
     let mut event_reader = EventStream::new();
     let (quit_sender, quit_receiver) = flume::unbounded();
     let (redraw_sender, redraw_receiver) = flume::unbounded();
 
-    let mut root = creator(quit_sender, redraw_sender.clone());
-    redraw_sender
-        .send_async(())
+    let program_actions = ProgramActions {
+        quit_sender,
+        redraw_sender,
+    };
+
+    let mut root = creator(program_actions.clone());
+    program_actions
+        .redraw_async()
         .await
-        .expect("Failed to send update event");
+        .expect("Failed to render");
     loop {
         select! {
             event = event_reader.next() => {

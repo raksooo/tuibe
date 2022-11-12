@@ -15,7 +15,10 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
-    pub fn new(redraw_sender: flume::Sender<()>) -> Self {
+    pub fn new<F>(redraw: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
         let dots = Arc::new(Mutex::new(0));
 
         let dots_clone = Arc::clone(&dots);
@@ -26,7 +29,7 @@ impl LoadingIndicator {
                     let mut dots = dots_clone.lock();
                     *dots = (*dots + 1) % 4;
                 }
-                let _ = redraw_sender.send_async(()).await;
+                redraw();
             }
         });
 

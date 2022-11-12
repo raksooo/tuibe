@@ -10,6 +10,7 @@ async-trait = "0.1.58"
 atom_syndication = "0.11.0"
 chrono = "0.4.22"
 crossterm = { version = "0.25.0", features = ["event-stream"] }
+delegate = "0.8.0"
 err-derive = "0.3.1"
 flume = "0.10.14"
 futures = "0.3.25"
