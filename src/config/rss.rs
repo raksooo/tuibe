@@ -1,8 +1,6 @@
 use super::file_handler::ConfigFileHandler;
-use crate::config::{
-    config::{Config, Video},
-    error::ConfigError,
-};
+use crate::config::{error::ConfigError, Config, Video};
+
 use async_trait::async_trait;
 use atom_syndication::Entry;
 use futures::future;

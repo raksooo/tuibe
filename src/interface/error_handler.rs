@@ -3,6 +3,7 @@ use super::{
     dialog::Dialog,
 };
 use crate::ui::ProgramActions;
+
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::{fmt::Display, sync::Arc};

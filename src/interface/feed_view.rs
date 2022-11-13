@@ -3,7 +3,8 @@ use super::{
     dialog::Dialog,
     main_view::MainViewActions,
 };
-use crate::config::{common::CommonConfigHandler, config::Video};
+use crate::config::{common::CommonConfigHandler, Video};
+
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
 use std::{env, process::Stdio, sync::Arc};

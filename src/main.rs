@@ -1,7 +1,7 @@
 mod config;
 mod interface;
 
-use config::{config::Config, rss::RssConfigHandler};
+use config::{rss::RssConfigHandler, Config};
 use interface::{app::App, ui};
 
 use crossterm::{

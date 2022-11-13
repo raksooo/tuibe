@@ -2,6 +2,7 @@ use super::{
     component::{Component, Frame},
     dialog::Dialog,
 };
+
 use futures_timer::Delay;
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};

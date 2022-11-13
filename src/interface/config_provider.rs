@@ -6,8 +6,9 @@ use super::{
     main_view::MainView,
 };
 use crate::config::{
-    common::CommonConfigHandler, config::Config, error::ConfigError, rss::RssConfigHandler,
+    common::CommonConfigHandler, error::ConfigError, rss::RssConfigHandler, Config,
 };
+
 use crossterm::event::{Event, KeyCode};
 use delegate::delegate;
 use parking_lot::Mutex;

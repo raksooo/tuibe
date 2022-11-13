@@ -4,6 +4,7 @@ use super::{
     error_handler::ErrorHandler,
 };
 use crate::ui::ProgramActions;
+
 use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,

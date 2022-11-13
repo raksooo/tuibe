@@ -6,6 +6,7 @@ use crate::{
         main_view::MainViewActions,
     },
 };
+
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;

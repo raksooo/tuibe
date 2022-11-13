@@ -4,7 +4,8 @@ use super::{
     error_handler::ErrorMsg,
     feed_view::FeedView,
 };
-use crate::config::{common::CommonConfigHandler, config::Video};
+use crate::config::{common::CommonConfigHandler, Video};
+
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use delegate::delegate;
 use parking_lot::Mutex;
@@ -113,7 +114,7 @@ impl MainView {
 impl Component for MainView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let show_config = self.show_config.lock();
-        let config_numerator = if *show_config { 1 } else { 0 };
+        let config_numerator = u32::from(*show_config);
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)

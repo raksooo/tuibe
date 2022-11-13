@@ -1,4 +1,5 @@
 use crate::interface::component::{Component, Frame};
+
 use tui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
