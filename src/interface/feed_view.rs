@@ -36,10 +36,13 @@ impl FeedView {
     ) -> Self {
         let last_played_timestamp = common_config.config().last_played_timestamp;
         let videos = videos
-            .iter()
-            .map(|video| VideoListItem {
-                video: video.to_owned(),
-                selected: video.date.timestamp() > last_played_timestamp,
+            .into_iter()
+            .map(|video| {
+                let timestamp = video.date.timestamp();
+                VideoListItem {
+                    video,
+                    selected: timestamp > last_played_timestamp,
+                }
             })
             .collect();
 
@@ -112,7 +115,7 @@ impl FeedView {
             let playing = Arc::clone(&self.playing);
             let actions = self.actions.clone();
             tokio::spawn(async move {
-                let videos = selected_videos.iter().map(|video| video.url.clone());
+                let videos = selected_videos.iter().map(|video| &video.url);
                 let play_result = Command::new(player)
                     .args(videos)
                     .stdout(Stdio::null())
@@ -176,10 +179,10 @@ impl FeedView {
         let description = self
             .videos
             .get(self.current_item)
-            .map(|video| video.video.description.clone())
+            .map(|video| &video.video.description)
             .unwrap();
 
-        Paragraph::new(description)
+        Paragraph::new(&**description)
             .block(Block::default().title("Description").borders(Borders::TOP))
             .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: true })

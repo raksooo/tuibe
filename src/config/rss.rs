@@ -36,12 +36,10 @@ pub struct RssConfigHandler {
 
 impl RssConfigHandler {
     pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
-        let url = url.to_owned();
-
         let (feed, videos) = Self::fetch_feed(&url).await?;
         let new_config = {
             let mut data = self.data.lock();
-            data.config.feeds.push(url);
+            data.config.feeds.push(url.to_owned());
             data.feeds.push(feed);
             data.videos.extend(videos);
 
