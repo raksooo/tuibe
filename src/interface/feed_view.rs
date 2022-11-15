@@ -21,7 +21,7 @@ struct VideoListItem {
 }
 
 pub struct FeedView {
-    actions: MainViewActions,
+    actions: Arc<MainViewActions>,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
     videos: Vec<VideoListItem>,
@@ -47,7 +47,7 @@ impl FeedView {
             .collect();
 
         Self {
-            actions,
+            actions: Arc::new(actions),
             common_config: Arc::new(common_config),
             playing: Arc::new(Mutex::new(false)),
             videos,
@@ -87,10 +87,13 @@ impl FeedView {
         }
 
         let common_config = Arc::clone(&self.common_config);
+        let actions = Arc::clone(&self.actions);
         tokio::spawn(async move {
-            common_config
-                .set_last_played_timestamp(last_played_timestamp)
-                .await;
+            actions.handle_result(
+                common_config
+                    .set_last_played_timestamp(last_played_timestamp)
+                    .await,
+            );
         });
     }
 
@@ -113,7 +116,7 @@ impl FeedView {
 
             let player = self.get_player();
             let playing = Arc::clone(&self.playing);
-            let actions = self.actions.clone();
+            let actions = Arc::clone(&self.actions);
             tokio::spawn(async move {
                 let videos = selected_videos.iter().map(|video| &video.url);
                 let play_result = Command::new(player)

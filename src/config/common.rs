@@ -5,7 +5,6 @@ use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::oneshot;
 
 const CONFIG_NAME: &str = "config";
 
@@ -26,7 +25,7 @@ impl Default for CommonConfig {
 
 pub struct CommonConfigHandler {
     pub config: Arc<Mutex<CommonConfig>>,
-    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler>>,
+    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler<CommonConfig>>>,
 }
 
 impl CommonConfigHandler {
@@ -43,29 +42,18 @@ impl CommonConfigHandler {
     pub async fn set_last_played_timestamp(
         &self,
         last_played_timestamp: i64,
-    ) -> oneshot::Receiver<Result<(), ConfigError>> {
-        let (sender, receiver) = oneshot::channel();
-        let config = Arc::clone(&self.config);
-        let file_handler = Arc::clone(&self.file_handler);
+    ) -> Result<(), ConfigError> {
+        let new_config = {
+            let mut config = self.config.lock();
+            config.last_played_timestamp = last_played_timestamp;
+            config.clone()
+        };
 
-        tokio::spawn(async move {
-            let new_config = {
-                let mut config = config.lock();
-                config.last_played_timestamp = last_played_timestamp;
-                config.clone()
-            };
-
-            let file_handler = file_handler.lock().await;
-            let result = file_handler.write(&new_config).await;
-
-            let _ = sender.send(result);
-        });
-
-        receiver
+        let file_handler = self.file_handler.lock().await;
+        file_handler.write(&new_config).await
     }
 
     pub fn config(&self) -> CommonConfig {
-        let config = self.config.lock();
-        config.clone()
+        self.config.lock().clone()
     }
 }

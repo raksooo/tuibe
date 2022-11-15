@@ -25,6 +25,7 @@ async fn main() {
         .nth(1);
 
     if let Some(path) = youtube_export_path {
+        println!("Importing subscriptions...");
         RssConfigHandler::load()
             .await
             .expect("Failed to load config")

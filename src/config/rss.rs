@@ -31,12 +31,12 @@ struct RssConfigHandlerData {
 
 pub struct RssConfigHandler {
     data: Arc<Mutex<RssConfigHandlerData>>,
-    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler>>,
+    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler<RssConfig>>>,
 }
 
 impl RssConfigHandler {
     pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
-        let (feed, videos) = Self::fetch_feed(&url).await?;
+        let (feed, videos) = Self::fetch_feed(url).await?;
         let new_config = {
             let mut data = self.data.lock();
             data.config.feeds.push(url.to_owned());
@@ -50,7 +50,6 @@ impl RssConfigHandler {
     }
 
     pub async fn import_youtube(&self, path: String) -> Result<(), ConfigError> {
-        println!("Importing subscriptions...");
         let content = fs::read_to_string(&path)
             .await
             .map_err(|_| ConfigError::ReadConfigFile)?;
@@ -92,8 +91,7 @@ impl RssConfigHandler {
     }
 
     pub fn feeds(&self) -> Vec<Feed> {
-        let data = self.data.lock();
-        data.feeds.clone()
+        self.data.lock().feeds.clone()
     }
 
     async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, ConfigError> {
@@ -158,8 +156,7 @@ impl RssConfigHandler {
 
     async fn save(&self, config: &RssConfig) -> Result<(), ConfigError> {
         let file_handler = self.file_handler.lock().await;
-        file_handler.write(config).await?;
-        Ok(())
+        file_handler.write(config).await
     }
 }
 
