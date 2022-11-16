@@ -20,8 +20,8 @@ async fn main() {
     }
 
     let youtube_export_path = args
-        .into_iter()
-        .skip_while(|arg| arg == "--import-youtube")
+        .iter()
+        .skip_while(|arg| arg.as_str() != "--import-youtube")
         .nth(1);
 
     if let Some(path) = youtube_export_path {
@@ -29,7 +29,7 @@ async fn main() {
         RssConfigHandler::load()
             .await
             .expect("Failed to load config")
-            .import_youtube(path)
+            .import_youtube(&path)
             .await
             .expect("Failed to import youtube takeout");
         println!("Done.");

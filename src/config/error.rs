@@ -32,6 +32,9 @@ pub enum ConfigError {
     #[error(display = "Failed to parse video")]
     ParseVideo,
 
+    #[error(display = "Failed to read subscriptions file: {}", _0)]
+    ReadYoutubeTakeout(#[error(source, no_from)] std::io::Error),
+
     #[error(display = "Failed to parse YouTube takeout")]
     ParseYoutubeTakeout,
 }

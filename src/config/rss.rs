@@ -49,10 +49,10 @@ impl RssConfigHandler {
         self.save(&new_config).await
     }
 
-    pub async fn import_youtube(&self, path: String) -> Result<(), ConfigError> {
+    pub async fn import_youtube(&self, path: &str) -> Result<(), ConfigError> {
         let content = fs::read_to_string(&path)
             .await
-            .map_err(|_| ConfigError::ReadConfigFile)?;
+            .map_err(ConfigError::ReadYoutubeTakeout)?;
         let mut urls: Vec<String> = content
             .trim()
             .split('\n')
@@ -112,8 +112,7 @@ impl RssConfigHandler {
 
     async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, ConfigError> {
         let author = rss.title().as_str();
-        rss
-            .entries()
+        rss.entries()
             .iter()
             .map(|entry| Self::parse_video(entry, author))
             .collect()
