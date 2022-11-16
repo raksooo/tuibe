@@ -36,12 +36,12 @@ impl Component for Dialog {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         if let Some(body) = &self.body {
             let block = Block::default()
-                .title(&*self.title)
+                .title(self.title.as_str())
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::White))
                 .style(Style::default().bg(Color::Black));
 
-            let dialog = Paragraph::new(&**body)
+            let dialog = Paragraph::new(body.as_str())
                 .block(block)
                 .style(Style::default().fg(Color::White))
                 .wrap(Wrap { trim: true });
@@ -51,7 +51,7 @@ impl Component for Dialog {
             f.render_widget(Clear, area);
             f.render_widget(dialog, area);
         } else {
-            let dialog = Paragraph::new(&*self.title)
+            let dialog = Paragraph::new(self.title.as_str())
                 .block(Block::default().borders(Borders::ALL))
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center);
