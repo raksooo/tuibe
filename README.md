@@ -18,12 +18,14 @@ Available options:
 ```
 
 ## Todo
-- Design improvements
-- Copy url for currently selected video or feed
+- Add logging
 - Combine `handle_event` and `registered_events`
+- Add command for: copy url, select all, deselect all, update last played timestamp to current video
+- Design improvements
+- Save watched video urls instead of timestamp of last timestamp
 - Add support for RSS in addition to ATOM
 - Add support for other RSS feeds than YouTube
 - Add backend for YouTube API
-- Add flag to run with different backend
+- Add flag and config option to run with different backend
 - Correctly handle emojis in feed name and video name
 
