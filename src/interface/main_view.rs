@@ -96,7 +96,7 @@ impl MainView {
     }
 
     fn listen_main_view_msg(&self, main_view_receiver: flume::Receiver<MainViewMsg>) {
-        let show_config = Arc::clone(&self.show_config);
+        let show_config = self.show_config.clone();
         let actions = self.actions.clone();
 
         tokio::spawn(async move {

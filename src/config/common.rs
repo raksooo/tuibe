@@ -4,7 +4,6 @@ use crate::config::error::ConfigError;
 use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 const CONFIG_NAME: &str = "config";
 
@@ -24,8 +23,8 @@ impl Default for CommonConfig {
 }
 
 pub struct CommonConfigHandler {
-    pub config: Arc<Mutex<CommonConfig>>,
-    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler<CommonConfig>>>,
+    pub config: Mutex<CommonConfig>,
+    file_handler: tokio::sync::Mutex<ConfigFileHandler<CommonConfig>>,
 }
 
 impl CommonConfigHandler {
@@ -34,8 +33,8 @@ impl CommonConfigHandler {
         let config = file_handler.read().await?;
 
         Ok(Self {
-            config: Arc::new(Mutex::new(config)),
-            file_handler: Arc::new(tokio::sync::Mutex::new(file_handler)),
+            config: Mutex::new(config),
+            file_handler: tokio::sync::Mutex::new(file_handler),
         })
     }
 

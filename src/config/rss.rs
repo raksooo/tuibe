@@ -6,7 +6,7 @@ use atom_syndication::Entry;
 use futures::future;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, sync::Arc};
+use std::collections::BTreeSet;
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
@@ -30,8 +30,8 @@ struct RssConfigHandlerData {
 }
 
 pub struct RssConfigHandler {
-    data: Arc<Mutex<RssConfigHandlerData>>,
-    file_handler: Arc<tokio::sync::Mutex<ConfigFileHandler<RssConfig>>>,
+    data: Mutex<RssConfigHandlerData>,
+    file_handler: tokio::sync::Mutex<ConfigFileHandler<RssConfig>>,
 }
 
 impl RssConfigHandler {
@@ -163,12 +163,12 @@ impl Config for RssConfigHandler {
         let videos = BTreeSet::new();
 
         Ok(Self {
-            data: Arc::new(Mutex::new(RssConfigHandlerData {
+            data: Mutex::new(RssConfigHandlerData {
                 config,
                 feeds,
                 videos,
-            })),
-            file_handler: Arc::new(tokio::sync::Mutex::new(file_handler)),
+            }),
+            file_handler: tokio::sync::Mutex::new(file_handler),
         })
     }
 
@@ -182,9 +182,7 @@ impl Config for RssConfigHandler {
 
         let futures = feeds.iter().map(|url| {
             let url = url.clone();
-            tokio::spawn(async move {
-                Self::fetch_feed(&url).await
-            })
+            tokio::spawn(async move { Self::fetch_feed(&url).await })
         });
         let feed_data = future::join_all(futures).await;
 

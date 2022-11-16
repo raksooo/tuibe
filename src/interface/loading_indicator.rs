@@ -22,7 +22,7 @@ impl LoadingIndicator {
     {
         let dots = Arc::new(Mutex::new(0));
 
-        let dots_clone = Arc::clone(&dots);
+        let dots_clone = dots.clone();
         let handle = tokio::spawn(async move {
             loop {
                 Delay::new(Duration::from_millis(500)).await;

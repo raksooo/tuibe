@@ -29,7 +29,7 @@ async fn main() {
         RssConfigHandler::load()
             .await
             .expect("Failed to load config")
-            .import_youtube(&path)
+            .import_youtube(path)
             .await
             .expect("Failed to import youtube takeout");
         println!("Done.");

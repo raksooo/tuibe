@@ -86,8 +86,8 @@ impl FeedView {
             video.selected = video.video.date.timestamp() > last_played_timestamp;
         }
 
-        let common_config = Arc::clone(&self.common_config);
-        let actions = Arc::clone(&self.actions);
+        let common_config = self.common_config.clone();
+        let actions = self.actions.clone();
         tokio::spawn(async move {
             actions.handle_result(
                 common_config
@@ -115,8 +115,8 @@ impl FeedView {
             self.actions.redraw();
 
             let player = self.get_player();
-            let playing = Arc::clone(&self.playing);
-            let actions = Arc::clone(&self.actions);
+            let playing = self.playing.clone();
+            let actions = self.actions.clone();
             tokio::spawn(async move {
                 let videos = selected_videos.iter().map(|video| &video.url);
                 let play_result = Command::new(player)

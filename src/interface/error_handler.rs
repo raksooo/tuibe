@@ -128,7 +128,7 @@ impl ErrorHandler {
 
     fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMsg>) {
         let actions = self.actions.clone();
-        let error = Arc::clone(&self.error);
+        let error = self.error.clone();
         tokio::spawn(async move {
             while let Ok(new_error) = error_receiver.recv_async().await {
                 {

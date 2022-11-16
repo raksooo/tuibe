@@ -61,7 +61,7 @@ impl RssConfigView {
             .url
             .clone();
 
-        let rss_config = Arc::clone(&self.rss_config);
+        let rss_config = self.rss_config.clone();
         let actions = self.actions.clone();
 
         tokio::spawn(async move {
@@ -78,9 +78,9 @@ impl RssConfigView {
         self.actions.redraw();
 
         let url = url.to_owned();
-        let rss_config = Arc::clone(&self.rss_config);
+        let rss_config = self.rss_config.clone();
         let actions = self.actions.clone();
-        let loading_indicator = Arc::clone(&self.loading_indicator);
+        let loading_indicator = self.loading_indicator.clone();
 
         tokio::spawn(async move {
             {
