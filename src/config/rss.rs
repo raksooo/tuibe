@@ -111,18 +111,12 @@ impl RssConfigHandler {
     }
 
     async fn parse_videos(rss: &atom_syndication::Feed) -> Result<Vec<Video>, ConfigError> {
-        use chrono::offset::Utc;
-
         let author = rss.title().as_str();
-        let mut videos: Vec<Video> = rss
+        rss
             .entries()
             .iter()
             .map(|entry| Self::parse_video(entry, author))
-            .collect::<Result<_, _>>()?;
-
-        let now = Utc::now();
-        videos.retain(|video| now.years_since(video.date.into()).unwrap() < 1);
-        Ok(videos)
+            .collect()
     }
 
     fn parse_video(entry: &Entry, author: &str) -> Result<Video, ConfigError> {
