@@ -179,13 +179,13 @@ impl FeedView {
 
     fn create_description(&self) -> Paragraph<'_> {
         // current_item is always within the bounds of videos
-        let description = self
+        let description: &str = self
             .videos
             .get(self.current_item)
-            .map(|video| &video.video.description)
-            .unwrap();
+            .map(|video| video.video.description.as_str())
+            .unwrap_or_default();
 
-        Paragraph::new(&**description)
+        Paragraph::new(description)
             .block(Block::default().title("Description").borders(Borders::TOP))
             .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: true })
