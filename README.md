@@ -18,7 +18,6 @@ Available options:
 ```
 
 ## Todo
-- Parallelize fetch and parsing of rss feeds
 - Design improvements
 - Copy url for currently selected video or feed
 - Combine `handle_event` and `registered_events`

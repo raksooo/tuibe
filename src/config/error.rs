@@ -26,6 +26,9 @@ pub enum ConfigError {
     #[error(display = "Failed to fetch RSS feed")]
     FetchFeed(#[error(from)] reqwest::Error),
 
+    #[error(display = "Failed to join fetch handles")]
+    JoinFetchTasks(#[error(from)] tokio::task::JoinError),
+
     #[error(display = "Failed to read RSS feed: {}", _0)]
     ReadFeed(#[error(from)] atom_syndication::Error),
 

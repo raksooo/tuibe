@@ -180,10 +180,17 @@ impl Config for RssConfigHandler {
             data.config.feeds.clone()
         };
 
-        let feed_data = future::join_all(feeds.iter().map(|url| Self::fetch_feed(url))).await;
+        let futures = feeds.iter().map(|url| {
+            let url = url.clone();
+            tokio::spawn(async move {
+                Self::fetch_feed(&url).await
+            })
+        });
+        let feed_data = future::join_all(futures).await;
+
         let mut data = self.data.lock();
         for result in feed_data {
-            match result {
+            match result? {
                 Ok((feed, videos)) => {
                     data.feeds.push(feed);
                     data.videos.extend(videos);
