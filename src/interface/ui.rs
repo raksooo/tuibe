@@ -1,7 +1,11 @@
+use std::time::Duration;
+
 use super::component::{Backend, Component};
 
 use crossterm::event::EventStream;
 use err_derive::Error;
+use futures_timer::Delay;
+use log::{debug, info};
 use tokio::select;
 use tokio_stream::StreamExt;
 use tui::Terminal;
@@ -55,6 +59,8 @@ where
 
     let mut root = creator(program_actions.clone());
     program_actions.redraw_async().await?;
+
+    info!("Starting event loop");
     loop {
         select! {
             event = event_reader.next() => {
@@ -67,12 +73,20 @@ where
 
             event = redraw_receiver.recv_async() => {
                 if event.is_ok() {
-                    redraw_receiver.drain();
+                    let drained = redraw_receiver.drain();
+                    if drained.len() > 0 {
+                        debug!("Drained {} redraw messages", drained.len());
+                    }
+
                     perform_draw(terminal, &mut root)?;
+
+                    // Wait a few milliseconds to prevent to many consecutive redraws
+                    Delay::new(Duration::from_millis(5)).await;
                 }
             },
         };
     }
+    info!("Exiting");
 
     Ok(())
 }
