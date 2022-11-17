@@ -18,7 +18,6 @@ Available options:
 ```
 
 ## Todo
-- Add logging
 - Combine `handle_event` and `registered_events`
 - Add command for: copy url, select all, deselect all, update last played timestamp to current video
 - Design improvements

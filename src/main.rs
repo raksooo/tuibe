@@ -1,6 +1,8 @@
 mod config;
 mod interface;
 
+use std::{fs::File, str::FromStr};
+
 use config::{rss::RssConfigHandler, Config};
 use interface::{app::App, ui};
 
@@ -9,10 +11,13 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use simplelog::{CombinedLogger, LevelFilter, WriteLogger};
 use tui::{backend::CrosstermBackend, Terminal};
 
 #[tokio::main]
 async fn main() {
+    setup_logging();
+
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|arg| arg == "-h" || arg == "--help") {
         print_help();
@@ -23,19 +28,24 @@ async fn main() {
         .iter()
         .skip_while(|arg| arg.as_str() != "--import-youtube")
         .nth(1);
-
     if let Some(path) = youtube_export_path {
-        println!("Importing subscriptions...");
-        RssConfigHandler::load()
-            .await
-            .expect("Failed to load config")
-            .import_youtube(path)
-            .await
-            .expect("Failed to import youtube takeout");
-        println!("Done.");
+        import_youtube_takeout(path).await;
     } else {
         run().await;
     }
+}
+
+fn setup_logging() {
+    let log_level = std::env::var("LOG_LEVEL")
+        .ok()
+        .unwrap_or_else(|| String::from("Off"));
+
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::from_str(&log_level).expect("Failed to parse log level"),
+        simplelog::Config::default(),
+        File::create("tuibe.log").expect("Failed to create log file"),
+    )])
+    .expect("Failed to set up logger");
 }
 
 fn print_help() {
@@ -43,6 +53,17 @@ fn print_help() {
     println!("  -h|--help                 Show this help message.");
     println!("  --import-youtube <path>   Import subscriptions csv from YouTube takeout");
     println!("  --player <player>         Override player in config");
+}
+
+async fn import_youtube_takeout(path: &str) {
+    println!("Importing subscriptions...");
+    RssConfigHandler::load()
+        .await
+        .expect("Failed to load config")
+        .import_youtube(path)
+        .await
+        .expect("Failed to import youtube takeout");
+    println!("Done.");
 }
 
 async fn run() {
