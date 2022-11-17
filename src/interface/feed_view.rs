@@ -74,6 +74,16 @@ impl FeedView {
         }
     }
 
+    fn deselect_all(&mut self) {
+        for mut video in self.videos.iter_mut() {
+            if video.selected {
+                video.selected = false;
+            }
+        }
+
+        self.actions.redraw();
+    }
+
     fn toggle_current_item(&mut self) {
         if let Some(video) = self.videos.get_mut(self.current_item) {
             video.selected = !video.selected;
@@ -231,6 +241,7 @@ impl Component for FeedView {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char('g') => self.move_top(),
+                KeyCode::Char('a') => self.deselect_all(),
                 KeyCode::Char(' ') => self.toggle_current_item(),
                 KeyCode::Char('p') => self.play(),
                 KeyCode::Char('n') => self.set_current_as_last_played(),
@@ -250,6 +261,7 @@ impl Component for FeedView {
                 (String::from("Space"), String::from("Select")),
                 (String::from("p"), String::from("Play")),
                 (String::from("n"), String::from("Update last played")),
+                (String::from("a"), String::from("Deselect all")),
             ]
         }
     }
