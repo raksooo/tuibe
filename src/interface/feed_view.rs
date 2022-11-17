@@ -67,6 +67,11 @@ impl FeedView {
         self.actions.redraw();
     }
 
+    fn move_bottom(&mut self) {
+        self.current_item = self.videos.len() - 1;
+        self.actions.redraw();
+    }
+
     fn move_down(&mut self) {
         if self.current_item + 1 < self.videos.len() {
             self.current_item += 1;
@@ -241,6 +246,7 @@ impl Component for FeedView {
                 KeyCode::Char('j') => self.move_down(),
                 KeyCode::Char('k') => self.move_up(),
                 KeyCode::Char('g') => self.move_top(),
+                KeyCode::Char('G') => self.move_bottom(),
                 KeyCode::Char('a') => self.deselect_all(),
                 KeyCode::Char(' ') => self.toggle_current_item(),
                 KeyCode::Char('p') => self.play(),
@@ -258,6 +264,7 @@ impl Component for FeedView {
                 (String::from("j"), String::from("Down")),
                 (String::from("k"), String::from("Up")),
                 (String::from("g"), String::from("Top")),
+                (String::from("G"), String::from("Bottom")),
                 (String::from("Space"), String::from("Select")),
                 (String::from("p"), String::from("Play")),
                 (String::from("n"), String::from("Update last played")),
