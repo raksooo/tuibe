@@ -19,7 +19,7 @@ Available options:
 
 ## Todo
 - Combine `handle_event` and `registered_events`
-- Add command for: copy url, select all, deselect all, update last played timestamp to current video
+- Add command for: copy url, deselect all
 - Design improvements
 - Save watched video urls instead of timestamp of last timestamp
 - Add support for RSS in addition to ATOM
