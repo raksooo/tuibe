@@ -9,7 +9,7 @@ use crossterm::event::{Event, KeyCode};
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 pub struct App {
@@ -27,18 +27,31 @@ impl App {
         }
     }
 
-    fn format_events(events: Vec<(String, String)>) -> String {
-        events
-            .iter()
-            .map(|(key, description)| format!("{key}: {description}"))
-            .collect::<Vec<String>>()
-            .join(" | ")
+    fn format_events(events: Vec<(String, String)>, width: u16) -> Vec<String> {
+        let mut lines: Vec<String> = vec![];
+
+        for (key, description) in events.iter() {
+            let label = format!("{key}: {description}");
+            if let Some(last) = lines.last_mut() {
+                if last.len() + label.len() + 3 < width.into() {
+                    last.push_str(&format!(" | {}", label));
+                    continue;
+                }
+            }
+
+            lines.push(label);
+        }
+
+        lines
     }
 }
 
 impl Component for App {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let events_height = 2;
+        let events = Self::format_events(self.registered_events(), area.width);
+        // It would be unreasonable for the number of command lines to be greater than u16
+        let events_height = (events.len() as u16) + 1;
+
         let content_area = Rect::new(area.x, area.y, area.width, area.height - events_height);
         let events_area = Rect::new(
             area.x + 1,
@@ -49,10 +62,10 @@ impl Component for App {
 
         self.error_handler.draw(f, content_area);
 
-        let events_label = Self::format_events(self.registered_events());
-        let events = Paragraph::new(events_label)
+        let events = Paragraph::new(events.join("\n"))
             .block(Block::default().borders(Borders::TOP))
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true });
 
         f.render_widget(events, events_area);
     }
