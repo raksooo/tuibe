@@ -6,7 +6,7 @@ use atom_syndication::Entry;
 use futures::future;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, cmp::Reverse};
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
@@ -137,13 +137,15 @@ impl RssConfigHandler {
             .href()
             .to_string();
 
+        let date = entry.published().ok_or(ConfigError::ParseVideo)?.to_owned();
+
         Ok(Video {
             title: entry.title().to_string(),
             url,
             author: author.to_string(),
             description,
             length: 0,
-            date: entry.published().ok_or(ConfigError::ParseVideo)?.to_owned(),
+            date: Reverse(date),
         })
     }
 
@@ -203,6 +205,6 @@ impl Config for RssConfigHandler {
 
     fn videos(&self) -> Vec<Video> {
         let data = self.data.lock();
-        data.videos.clone().into_iter().rev().collect()
+        data.videos.clone().into_iter().collect()
     }
 }

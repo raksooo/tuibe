@@ -38,7 +38,7 @@ impl FeedView {
         let videos = videos
             .into_iter()
             .map(|video| {
-                let timestamp = video.date.timestamp();
+                let timestamp = video.date().timestamp();
                 VideoListItem {
                     video,
                     selected: timestamp > last_played_timestamp,
@@ -98,14 +98,14 @@ impl FeedView {
 
     fn set_current_as_last_played(&mut self) {
         if let Some(video) = self.videos.get(self.current_item) {
-            self.update_last_played_timestamp(video.video.date.timestamp());
+            self.update_last_played_timestamp(video.video.date().timestamp());
             self.actions.redraw();
         }
     }
 
     fn update_last_played_timestamp(&mut self, last_played_timestamp: i64) {
         for mut video in self.videos.iter_mut() {
-            video.selected = video.video.date.timestamp() > last_played_timestamp;
+            video.selected = video.video.date().timestamp() > last_played_timestamp;
         }
 
         let common_config = self.common_config.clone();
@@ -128,7 +128,7 @@ impl FeedView {
             .collect();
 
         if let Some(newest_video) = selected_videos.first() {
-            self.update_last_played_timestamp(newest_video.date.timestamp());
+            self.update_last_played_timestamp(newest_video.date().timestamp());
 
             {
                 let mut playing = self.playing.lock();
