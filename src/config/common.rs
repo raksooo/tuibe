@@ -52,7 +52,11 @@ impl CommonConfigHandler {
         file_handler.write(&new_config).await
     }
 
-    pub fn config(&self) -> CommonConfig {
-        self.config.lock().clone()
+    pub fn player(&self) -> String {
+        self.config.lock().player.clone()
+    }
+
+    pub fn last_played_timestamp(&self) -> i64 {
+        self.config.lock().last_played_timestamp
     }
 }

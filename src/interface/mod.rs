@@ -7,6 +7,7 @@ mod config_provider;
 mod dialog;
 mod error_handler;
 mod feed_view;
+mod list;
 mod loading_indicator;
 mod main_view;
 

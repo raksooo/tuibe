@@ -1095,6 +1095,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sorted-vec"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eb853cc81eaf9f519b949deb6a1e2f1512c14006c2a2f6bd41b55fb0b37030a"
+
+[[package]]
 name = "spin"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1348,6 +1354,7 @@ dependencies = [
  "reqwest",
  "serde",
  "simplelog",
+ "sorted-vec",
  "tokio",
  "tokio-stream",
  "toml",

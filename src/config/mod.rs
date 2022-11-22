@@ -35,7 +35,7 @@ impl Video {
         self.date.0
     }
 
-    pub fn get_label(&self, width: usize) -> String {
+    pub fn label(&self, width: usize) -> String {
         // Subtract width of datetime and horizontal padding and checkmark.
         let width = width - 16 - 2 - 2;
         // Split the area between title and author 3/4 for author.

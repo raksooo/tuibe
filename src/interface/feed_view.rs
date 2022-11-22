@@ -1,12 +1,14 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
+    list::list_range,
     main_view::MainViewActions,
 };
 use crate::config::{common::CommonConfigHandler, Video};
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
+use sorted_vec::SortedSet;
 use std::{env, process::Stdio, sync::Arc};
 use tokio::process::Command;
 use tui::{
@@ -15,17 +17,200 @@ use tui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VideoListItem {
-    pub video: Video,
-    pub selected: bool,
+    video: Video,
+    selected: bool,
+}
+
+impl VideoListItem {
+    pub fn new(video: Video, last_played_timestamp: i64) -> Self {
+        let selected = video.date().timestamp() > last_played_timestamp;
+        Self { video, selected }
+    }
+
+    pub fn selected(&self) -> bool {
+        self.selected
+    }
+
+    pub fn toggle_selected(&mut self) {
+        self.selected = !self.selected;
+    }
+
+    pub fn deselect(&mut self) {
+        self.selected = !self.selected;
+    }
+
+    pub fn select_based_on_timestamp(&mut self, last_played_timestamp: i64) {
+        self.selected = self.timestamp() > last_played_timestamp;
+    }
+
+    pub fn label(&self, width: usize) -> String {
+        self.video.label(width)
+    }
+
+    pub fn description(&self) -> String {
+        self.video.description.clone()
+    }
+
+    pub fn timestamp(&self) -> i64 {
+        self.video.date().timestamp()
+    }
+
+    pub fn url(&self) -> String {
+        self.video.url.clone()
+    }
+}
+
+struct VideoListInner {
+    videos: SortedSet<VideoListItem>,
+    current_index: Option<usize>,
+}
+
+struct VideoList {
+    inner: Mutex<VideoListInner>,
+}
+
+impl VideoList {
+    pub fn new(videos: Vec<Video>, last_played_timestamp: i64) -> Self {
+        let video_list_items: Vec<VideoListItem> = videos
+            .iter()
+            .map(|video| VideoListItem::new(video.to_owned(), last_played_timestamp))
+            .collect();
+
+        let inner = VideoListInner {
+            videos: SortedSet::from_unsorted(video_list_items),
+            current_index: videos.first().map(|_| 0),
+        };
+
+        Self {
+            inner: Mutex::new(inner),
+        }
+    }
+
+    pub fn move_up(&self) {
+        self.mutate_current_index(|current_index| current_index.saturating_sub(1));
+    }
+
+    pub fn move_down(&self) {
+        self.mutate_current_index(|current_index| current_index.saturating_add(1));
+    }
+
+    pub fn move_top(&self) {
+        self.mutate_current_index(|_| 0);
+    }
+
+    pub fn move_bottom(&self) {
+        self.mutate_current_index(|_| usize::MAX);
+    }
+
+    pub fn toggle_current(&self) {
+        self.mutate_current_video(|video| video.toggle_selected());
+    }
+
+    pub fn deselect_all(&self) {
+        self.mutate_every_video(|video| video.deselect());
+    }
+
+    pub fn current_timestamp(&self) -> Option<i64> {
+        let inner = self.inner.lock();
+        inner
+            .current_index
+            .and_then(|current_index| inner.videos.get(current_index))
+            .map(|video| video.timestamp())
+    }
+
+    pub fn update_last_played_timestamp(&self, last_played_timestamp: i64) {
+        self.mutate_every_video(|video| video.select_based_on_timestamp(last_played_timestamp));
+    }
+
+    pub fn selected_videos(&self) -> Vec<VideoListItem> {
+        let inner = self.inner.lock();
+        inner
+            .videos
+            .iter()
+            .cloned()
+            .filter_map(|video| video.selected().then_some(video))
+            .collect()
+    }
+
+    pub fn list(&self, area: Rect) -> List<'_> {
+        let inner = self.inner.lock();
+        let range = if let Some(current_index) = inner.current_index {
+            list_range(area, inner.videos.len(), current_index)
+        } else {
+            0..0
+        };
+
+        let items: Vec<ListItem> = inner
+            .videos
+            .iter()
+            .cloned()
+            .enumerate()
+            .skip(range.start)
+            .take(range.end - range.start)
+            .map(|(i, video)| {
+                let selected = if video.selected() { "✓" } else { " " };
+                let width: usize = area.width.into();
+                let label = video.label(width - 2);
+
+                let item = ListItem::new(format!("{selected} {label}"));
+                if matches!(inner.current_index, Some(current_index) if i == current_index) {
+                    item.style(Style::default().fg(Color::Green))
+                } else {
+                    item
+                }
+            })
+            .collect();
+
+        List::new(items)
+            .block(Block::default().title("Videos"))
+            .style(Style::default().fg(Color::White))
+    }
+
+    pub fn current_description(&self) -> Paragraph<'_> {
+        let inner = self.inner.lock();
+        let description = inner
+            .current_index
+            .and_then(|current_index| inner.videos.get(current_index))
+            .map(|video| video.description())
+            .unwrap_or_default();
+
+        Paragraph::new(description)
+            .block(Block::default().title("Description").borders(Borders::TOP))
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true })
+    }
+
+    // Mutates the index and clamps it to the available video indexes
+    fn mutate_current_index(&self, f: impl Fn(usize) -> usize) {
+        let mut inner = self.inner.lock();
+        inner.current_index = inner
+            .current_index
+            .map(|current_index| f(current_index).clamp(0, inner.videos.len() - 1));
+    }
+
+    fn mutate_every_video(&self, f: impl Fn(&mut VideoListItem)) {
+        let mut inner = self.inner.lock();
+        inner
+            .videos
+            .mutate_vec(|videos| videos.iter_mut().for_each(f));
+    }
+
+    fn mutate_current_video(&self, f: impl FnOnce(&mut VideoListItem)) {
+        let mut inner = self.inner.lock();
+        let Some(current_index) = inner.current_index else { return };
+        inner
+            .videos
+            .mutate_vec(|videos| videos.get_mut(current_index).map(f));
+    }
 }
 
 pub struct FeedView {
     actions: Arc<MainViewActions>,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
-    videos: Vec<VideoListItem>,
-    current_item: usize,
+    videos_list: Arc<VideoList>,
 }
 
 impl FeedView {
@@ -34,101 +219,44 @@ impl FeedView {
         common_config: CommonConfigHandler,
         videos: Vec<Video>,
     ) -> Self {
-        let last_played_timestamp = common_config.config().last_played_timestamp;
-        let videos = videos
-            .into_iter()
-            .map(|video| {
-                let timestamp = video.date().timestamp();
-                VideoListItem {
-                    video,
-                    selected: timestamp > last_played_timestamp,
-                }
-            })
-            .collect();
+        let last_played_timestamp = common_config.last_played_timestamp();
 
         Self {
             actions: Arc::new(actions),
             common_config: Arc::new(common_config),
             playing: Arc::new(Mutex::new(false)),
-            videos,
-            current_item: 0,
-        }
-    }
-
-    fn move_up(&mut self) {
-        if self.current_item > 0 {
-            self.current_item -= 1;
-            self.actions.redraw();
-        }
-    }
-
-    fn move_top(&mut self) {
-        self.current_item = 0;
-        self.actions.redraw();
-    }
-
-    fn move_bottom(&mut self) {
-        self.current_item = self.videos.len() - 1;
-        self.actions.redraw();
-    }
-
-    fn move_down(&mut self) {
-        if self.current_item + 1 < self.videos.len() {
-            self.current_item += 1;
-            self.actions.redraw();
-        }
-    }
-
-    fn deselect_all(&mut self) {
-        for mut video in self.videos.iter_mut() {
-            if video.selected {
-                video.selected = false;
-            }
-        }
-
-        self.actions.redraw();
-    }
-
-    fn toggle_current_item(&mut self) {
-        if let Some(video) = self.videos.get_mut(self.current_item) {
-            video.selected = !video.selected;
-            self.actions.redraw();
+            videos_list: Arc::new(VideoList::new(videos, last_played_timestamp)),
         }
     }
 
     fn set_current_as_last_played(&mut self) {
-        if let Some(video) = self.videos.get(self.current_item) {
-            self.update_last_played_timestamp(video.video.date().timestamp());
-            self.actions.redraw();
-        }
+        let Some(last_played_timestamp) = self.videos_list.current_timestamp() else { return };
+        self.update_last_played_timestamp(last_played_timestamp);
     }
 
     fn update_last_played_timestamp(&mut self, last_played_timestamp: i64) {
-        for mut video in self.videos.iter_mut() {
-            video.selected = video.video.date().timestamp() > last_played_timestamp;
-        }
+        self.videos_list
+            .update_last_played_timestamp(last_played_timestamp);
 
         let common_config = self.common_config.clone();
         let actions = self.actions.clone();
         tokio::spawn(async move {
-            actions.handle_result(
-                common_config
-                    .set_last_played_timestamp(last_played_timestamp)
-                    .await,
-            );
+            actions
+                .redraw_or_error_async(
+                    common_config
+                        .set_last_played_timestamp(last_played_timestamp)
+                        .await,
+                    true,
+                )
+                .await;
         });
     }
 
     fn play(&mut self) {
-        let selected_videos: Vec<Video> = self
-            .videos
-            .iter()
-            .filter(|video| video.selected)
-            .map(|video| video.video.clone())
-            .collect();
+        let selected_videos = self.videos_list.selected_videos();
 
         if let Some(newest_video) = selected_videos.first() {
-            self.update_last_played_timestamp(newest_video.date().timestamp());
+            self.update_last_played_timestamp(newest_video.timestamp());
 
             {
                 let mut playing = self.playing.lock();
@@ -140,7 +268,7 @@ impl FeedView {
             let playing = self.playing.clone();
             let actions = self.actions.clone();
             tokio::spawn(async move {
-                let videos = selected_videos.iter().map(|video| &video.url);
+                let videos = selected_videos.iter().map(|video| video.url());
                 let play_result = Command::new(player)
                     .args(videos)
                     .stdout(Stdio::null())
@@ -160,57 +288,12 @@ impl FeedView {
     fn get_player(&self) -> String {
         match env::args().skip_while(|arg| arg != "--player").nth(1) {
             Some(player) => player,
-            None => self.common_config.config().player,
+            None => self.common_config.player(),
         }
     }
 
     fn is_playing(&self) -> bool {
         *self.playing.lock()
-    }
-
-    fn create_list(&self, area: Rect) -> List<'_> {
-        let mut items: Vec<ListItem> = Vec::new();
-
-        let height: usize = area.height.into();
-        let nvideos = self.videos.len();
-        let start_index = if self.current_item < height / 2 {
-            0
-        } else if self.current_item >= nvideos - height / 2 {
-            nvideos - height + 1
-        } else {
-            self.current_item - (height / 2)
-        };
-
-        for (i, video) in self.videos.iter().skip(start_index).enumerate() {
-            let selected = if video.selected { "✓" } else { " " };
-            let width: usize = area.width.into();
-            let label = video.video.get_label(width - 2);
-            let mut item = ListItem::new(format!("{selected} {label}"));
-
-            if i + start_index == self.current_item {
-                item = item.style(Style::default().fg(Color::Green));
-            }
-
-            items.push(item);
-        }
-
-        List::new(items)
-            .block(Block::default().title("Videos"))
-            .style(Style::default().fg(Color::White))
-    }
-
-    fn create_description(&self) -> Paragraph<'_> {
-        // current_item is always within the bounds of videos
-        let description: &str = self
-            .videos
-            .get(self.current_item)
-            .map(|video| video.video.description.as_str())
-            .unwrap_or_default();
-
-        Paragraph::new(description)
-            .block(Block::default().title("Description").borders(Borders::TOP))
-            .style(Style::default().fg(Color::White))
-            .wrap(Wrap { trim: true })
     }
 }
 
@@ -221,8 +304,8 @@ impl Component for FeedView {
         let list_area = Rect::new(area.x, 0, area.width, description_y - 1);
         let description_area = Rect::new(area.x, description_y, area.width, description_height);
 
-        let list = self.create_list(list_area);
-        let description = self.create_description();
+        let list = self.videos_list.list(list_area);
+        let description = self.videos_list.current_description();
 
         f.render_widget(list, list_area);
         f.render_widget(description, description_area);
@@ -241,19 +324,21 @@ impl Component for FeedView {
             }
         } else if let Event::Key(event) = event {
             match event.code {
-                KeyCode::Up => self.move_up(),
-                KeyCode::Down => self.move_down(),
-                KeyCode::Char('j') => self.move_down(),
-                KeyCode::Char('k') => self.move_up(),
-                KeyCode::Char('g') => self.move_top(),
-                KeyCode::Char('G') => self.move_bottom(),
-                KeyCode::Char('a') => self.deselect_all(),
-                KeyCode::Char(' ') => self.toggle_current_item(),
+                KeyCode::Up => self.videos_list.move_up(),
+                KeyCode::Down => self.videos_list.move_down(),
+                KeyCode::Char('j') => self.videos_list.move_down(),
+                KeyCode::Char('k') => self.videos_list.move_up(),
+                KeyCode::Char('g') => self.videos_list.move_top(),
+                KeyCode::Char('G') => self.videos_list.move_bottom(),
+                KeyCode::Char('a') => self.videos_list.deselect_all(),
+                KeyCode::Char(' ') => self.videos_list.toggle_current(),
                 KeyCode::Char('p') => self.play(),
                 KeyCode::Char('n') => self.set_current_as_last_played(),
-                _ => (),
+                _ => return,
             }
         }
+
+        self.actions.redraw();
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
