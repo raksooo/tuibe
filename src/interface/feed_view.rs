@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
-    list::list_range,
+    list::generate_items,
     main_view::MainViewActions,
 };
 use crate::config::{common::CommonConfigHandler, Video};
@@ -14,7 +14,7 @@ use tokio::process::Command;
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, Paragraph, Wrap},
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -136,32 +136,16 @@ impl VideoList {
 
     pub fn list(&self, area: Rect) -> List<'_> {
         let inner = self.inner.lock();
-        let range = if let Some(current_index) = inner.current_index {
-            list_range(area, inner.videos.len(), current_index)
-        } else {
-            0..0
-        };
-
-        let items: Vec<ListItem> = inner
-            .videos
-            .iter()
-            .cloned()
-            .enumerate()
-            .skip(range.start)
-            .take(range.end - range.start)
-            .map(|(i, video)| {
+        let items = if let Some(current_index) = inner.current_index {
+            generate_items(area, current_index, inner.videos.to_vec(), |video| {
                 let selected = if video.selected() { "✓" } else { " " };
                 let width: usize = area.width.into();
                 let label = video.label(width - 2);
-
-                let item = ListItem::new(format!("{selected} {label}"));
-                if matches!(inner.current_index, Some(current_index) if i == current_index) {
-                    item.style(Style::default().fg(Color::Green))
-                } else {
-                    item
-                }
+                format!("{selected} {label}")
             })
-            .collect();
+        } else {
+            Vec::new()
+        };
 
         List::new(items)
             .block(Block::default().title("Videos"))

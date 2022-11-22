@@ -2,6 +2,7 @@ use crate::{
     config::rss::RssConfigHandler,
     interface::{
         component::{Component, Frame},
+        list::generate_items,
         loading_indicator::LoadingIndicator,
         main_view::MainViewActions,
     },
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List},
 };
 
 pub struct RssConfigView {
@@ -94,27 +95,8 @@ impl RssConfigView {
     }
 
     fn create_list(&self, area: Rect) -> List<'_> {
-        let mut items: Vec<ListItem> = Vec::new();
         let feeds = self.rss_config.feeds();
-
-        let height: usize = area.height.into();
-        let nfeeds = feeds.len();
-        let start_index = if self.selected < height / 2 {
-            0
-        } else if self.selected >= nfeeds - height / 2 {
-            nfeeds - height + 1
-        } else {
-            self.selected - (height / 2)
-        };
-
-        for (index, feed) in feeds.iter().skip(start_index).enumerate() {
-            let mut item = ListItem::new(feed.title.clone());
-            if index + start_index == self.selected {
-                item = item.style(Style::default().fg(Color::Green));
-            }
-            items.push(item);
-        }
-
+        let items = generate_items(area, self.selected, feeds, |feed| feed.title);
         List::new(items)
             .block(Block::default().title("Feeds").borders(Borders::RIGHT))
             .style(Style::default().fg(Color::White))
