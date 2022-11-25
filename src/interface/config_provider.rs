@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     config::rss_view::RssConfigView,
-    error_handler::{ErrorHandlerActions, ErrorMsg},
+    error_handler::{ErrorHandlerActions, ErrorMessage},
     loading_indicator::LoadingIndicator,
     main_view::MainView,
 };
@@ -16,28 +16,28 @@ use std::{fmt::Display, sync::Arc};
 use tui::layout::Rect;
 
 #[derive(Debug)]
-pub enum ConfigProviderMsg {
+pub enum ConfigProviderMessage {
     Reload,
 }
 
 #[derive(Clone)]
 pub struct ConfigProviderActions {
     error_handler_actions: ErrorHandlerActions,
-    config_sender: flume::Sender<ConfigProviderMsg>,
+    config_sender: flume::Sender<ConfigProviderMessage>,
 }
 
 #[allow(dead_code)]
 impl ConfigProviderActions {
     pub fn reload_config(&self) {
         self.error_handler_actions
-            .handle_result(self.config_sender.send(ConfigProviderMsg::Reload));
+            .handle_result(self.config_sender.send(ConfigProviderMessage::Reload));
     }
 
     pub async fn reload_config_async(&self) {
         self.error_handler_actions
             .handle_result_async(
                 self.config_sender
-                    .send_async(ConfigProviderMsg::Reload)
+                    .send_async(ConfigProviderMessage::Reload)
                     .await,
             )
             .await;
@@ -45,8 +45,8 @@ impl ConfigProviderActions {
 
     delegate! {
         to self.error_handler_actions {
-            pub fn error(&self, error: ErrorMsg);
-            pub async fn error_async(&self, error: ErrorMsg);
+            pub fn error(&self, error: ErrorMessage);
+            pub async fn error_async(&self, error: ErrorMessage);
             pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub async fn redraw_or_error_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub fn handle_result<T, E: Display>(&self, result: Result<T, E>);
@@ -89,12 +89,12 @@ impl ConfigProvider {
         config_provider
     }
 
-    fn listen_config_msg(&self, config_receiver: flume::Receiver<ConfigProviderMsg>) {
+    fn listen_config_msg(&self, config_receiver: flume::Receiver<ConfigProviderMessage>) {
         let actions = self.actions.clone();
         let child = self.child.clone();
 
         tokio::spawn(async move {
-            while let Ok(ConfigProviderMsg::Reload) = config_receiver.recv_async().await {
+            while let Ok(ConfigProviderMessage::Reload) = config_receiver.recv_async().await {
                 Self::reload(actions.clone(), child.clone()).await;
             }
         });

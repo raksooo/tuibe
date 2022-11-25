@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use std::{fmt::Display, sync::Arc};
 use tui::layout::Rect;
 
-pub struct ErrorMsg {
+pub struct ErrorMessage {
     pub message: String,
     pub ignorable: bool,
 }
@@ -17,18 +17,18 @@ pub struct ErrorMsg {
 #[derive(Clone)]
 pub struct ErrorHandlerActions {
     program_actions: ProgramActions,
-    error_sender: flume::Sender<ErrorMsg>,
+    error_sender: flume::Sender<ErrorMessage>,
 }
 
 #[allow(dead_code)]
 impl ErrorHandlerActions {
-    pub fn error(&self, error: ErrorMsg) {
+    pub fn error(&self, error: ErrorMessage) {
         self.error_sender
             .send(error)
             .expect("Failed to send error message");
     }
 
-    pub async fn error_async(&self, error: ErrorMsg) {
+    pub async fn error_async(&self, error: ErrorMessage) {
         self.error_sender
             .send_async(error)
             .await
@@ -38,7 +38,7 @@ impl ErrorHandlerActions {
     pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool) {
         match result {
             Ok(_) => self.redraw(),
-            Err(error) => self.error(ErrorMsg {
+            Err(error) => self.error(ErrorMessage {
                 message: error.to_string(),
                 ignorable,
             }),
@@ -53,7 +53,7 @@ impl ErrorHandlerActions {
         match result {
             Ok(_) => self.redraw_async().await,
             Err(error) => {
-                self.error_async(ErrorMsg {
+                self.error_async(ErrorMessage {
                     message: error.to_string(),
                     ignorable,
                 })
@@ -64,7 +64,7 @@ impl ErrorHandlerActions {
 
     pub fn handle_result<T, E: Display>(&self, result: Result<T, E>) {
         if let Err(error) = result {
-            self.error(ErrorMsg {
+            self.error(ErrorMessage {
                 message: error.to_string(),
                 ignorable: false,
             });
@@ -73,7 +73,7 @@ impl ErrorHandlerActions {
 
     pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>) {
         if let Err(error) = result {
-            self.error_async(ErrorMsg {
+            self.error_async(ErrorMessage {
                 message: error.to_string(),
                 ignorable: false,
             })
@@ -100,7 +100,7 @@ impl ErrorHandlerActions {
 pub struct ErrorHandler {
     actions: ErrorHandlerActions,
     child: Box<dyn Component>,
-    error: Arc<Mutex<Option<ErrorMsg>>>,
+    error: Arc<Mutex<Option<ErrorMessage>>>,
 }
 
 impl ErrorHandler {
@@ -126,7 +126,7 @@ impl ErrorHandler {
         new_error_handler
     }
 
-    fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMsg>) {
+    fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMessage>) {
         let actions = self.actions.clone();
         let error = self.error.clone();
         tokio::spawn(async move {
@@ -152,7 +152,7 @@ impl Component for ErrorHandler {
 
     fn handle_event(&mut self, event: Event) {
         let mut error = self.error.lock();
-        if let Some(ErrorMsg { ignorable, .. }) = *error {
+        if let Some(ErrorMessage { ignorable, .. }) = *error {
             if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
                 *error = None;
                 self.actions.redraw();
@@ -164,7 +164,7 @@ impl Component for ErrorHandler {
 
     fn registered_events(&self) -> Vec<(String, String)> {
         let error = self.error.lock();
-        if let Some(ErrorMsg { ignorable, .. }) = *error {
+        if let Some(ErrorMessage { ignorable, .. }) = *error {
             if ignorable {
                 vec![(String::from("Esc"), String::from("Close"))]
             } else {

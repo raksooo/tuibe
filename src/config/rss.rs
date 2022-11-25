@@ -6,7 +6,7 @@ use atom_syndication::Entry;
 use futures::future;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, cmp::Reverse};
+use std::{cmp::Reverse, collections::BTreeSet};
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
