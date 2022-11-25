@@ -16,7 +16,7 @@ pub fn generate_items<T>(
         .into_iter()
         .enumerate()
         .skip(range.start)
-        .take(range.end - range.start)
+        .take(range.len())
         .map(|(i, item)| {
             let item = ListItem::new(f(item));
             if i == current_index {

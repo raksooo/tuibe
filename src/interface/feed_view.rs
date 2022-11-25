@@ -20,17 +20,13 @@ use tui::{
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VideoListItem {
     video: Video,
-    selected: bool,
+    pub selected: bool,
 }
 
 impl VideoListItem {
     pub fn new(video: Video, last_played_timestamp: i64) -> Self {
         let selected = video.date().timestamp() > last_played_timestamp;
         Self { video, selected }
-    }
-
-    pub fn selected(&self) -> bool {
-        self.selected
     }
 
     pub fn toggle_selected(&mut self) {
@@ -67,9 +63,7 @@ struct VideoListInner {
     current_index: Option<usize>,
 }
 
-struct VideoList {
-    inner: Mutex<VideoListInner>,
-}
+struct VideoList(Mutex<VideoListInner>);
 
 impl VideoList {
     pub fn new(videos: Vec<Video>, last_played_timestamp: i64) -> Self {
@@ -83,9 +77,7 @@ impl VideoList {
             current_index: videos.first().map(|_| 0),
         };
 
-        Self {
-            inner: Mutex::new(inner),
-        }
+        Self(Mutex::new(inner))
     }
 
     pub fn move_up(&self) {
@@ -113,7 +105,7 @@ impl VideoList {
     }
 
     pub fn current_timestamp(&self) -> Option<i64> {
-        let inner = self.inner.lock();
+        let inner = self.0.lock();
         inner
             .current_index
             .and_then(|current_index| inner.videos.get(current_index))
@@ -125,20 +117,20 @@ impl VideoList {
     }
 
     pub fn selected_videos(&self) -> Vec<VideoListItem> {
-        let inner = self.inner.lock();
+        let inner = self.0.lock();
         inner
             .videos
             .iter()
             .cloned()
-            .filter_map(|video| video.selected().then_some(video))
+            .filter_map(|video| video.selected.then_some(video))
             .collect()
     }
 
     pub fn list(&self, area: Rect) -> List<'_> {
-        let inner = self.inner.lock();
+        let inner = self.0.lock();
         let items = if let Some(current_index) = inner.current_index {
             generate_items(area, current_index, inner.videos.to_vec(), |video| {
-                let selected = if video.selected() { "✓" } else { " " };
+                let selected = if video.selected { "✓" } else { " " };
                 let width: usize = area.width.into();
                 let label = video.label(width - 2);
                 format!("{selected} {label}")
@@ -153,7 +145,7 @@ impl VideoList {
     }
 
     pub fn current_description(&self) -> Paragraph<'_> {
-        let inner = self.inner.lock();
+        let inner = self.0.lock();
         let description = inner
             .current_index
             .and_then(|current_index| inner.videos.get(current_index))
@@ -168,21 +160,21 @@ impl VideoList {
 
     // Mutates the index and clamps it to the available video indexes
     fn mutate_current_index(&self, f: impl Fn(usize) -> usize) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.0.lock();
         inner.current_index = inner
             .current_index
             .map(|current_index| f(current_index).clamp(0, inner.videos.len() - 1));
     }
 
     fn mutate_every_video(&self, f: impl Fn(&mut VideoListItem)) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.0.lock();
         inner
             .videos
             .mutate_vec(|videos| videos.iter_mut().for_each(f));
     }
 
     fn mutate_current_video(&self, f: impl FnOnce(&mut VideoListItem)) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.0.lock();
         let Some(current_index) = inner.current_index else { return };
         inner
             .videos
@@ -270,10 +262,10 @@ impl FeedView {
     }
 
     fn get_player(&self) -> String {
-        match env::args().skip_while(|arg| arg != "--player").nth(1) {
-            Some(player) => player,
-            None => self.common_config.player(),
-        }
+        env::args()
+            .skip_while(|arg| arg != "--player")
+            .nth(1)
+            .unwrap_or_else(|| self.common_config.player())
     }
 
     fn is_playing(&self) -> bool {
