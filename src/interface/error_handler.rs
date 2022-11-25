@@ -22,13 +22,13 @@ pub struct ErrorHandlerActions {
 
 #[allow(dead_code)]
 impl ErrorHandlerActions {
-    pub fn error(&self, error: ErrorMessage) {
+    fn error(&self, error: ErrorMessage) {
         self.error_sender
             .send(error)
             .expect("Failed to send error message");
     }
 
-    pub async fn error_async(&self, error: ErrorMessage) {
+    async fn error_async(&self, error: ErrorMessage) {
         self.error_sender
             .send_async(error)
             .await
@@ -62,22 +62,30 @@ impl ErrorHandlerActions {
         }
     }
 
-    pub fn handle_result<T, E: Display>(&self, result: Result<T, E>) {
+    pub fn handle_error<E: Display>(&self, error: E, ignorable: bool) {
+        self.error(ErrorMessage {
+            message: error.to_string(),
+            ignorable,
+        });
+    }
+
+    pub async fn handle_error_async<E: Display>(&self, error: E, ignorable: bool) {
+        self.error_async(ErrorMessage {
+            message: error.to_string(),
+            ignorable,
+        })
+        .await;
+    }
+
+    pub fn handle_result<T, E: Display>(&self, result: Result<T, E>, ignorable: bool) {
         if let Err(error) = result {
-            self.error(ErrorMessage {
-                message: error.to_string(),
-                ignorable: false,
-            });
+            self.handle_error(error, ignorable);
         }
     }
 
-    pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>) {
+    pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool) {
         if let Err(error) = result {
-            self.error_async(ErrorMessage {
-                message: error.to_string(),
-                ignorable: false,
-            })
-            .await;
+            self.handle_error_async(error, ignorable).await;
         }
     }
 
@@ -88,11 +96,11 @@ impl ErrorHandlerActions {
 
     // Override program actions by wrapping them in error handling.
     pub fn redraw(&self) {
-        self.handle_result(self.program_actions.redraw());
+        self.handle_result(self.program_actions.redraw(), false);
     }
 
     pub async fn redraw_async(&self) {
-        self.handle_result_async(self.program_actions.redraw_async().await)
+        self.handle_result_async(self.program_actions.redraw_async().await, false)
             .await;
     }
 }

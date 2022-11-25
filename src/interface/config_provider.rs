@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     config::rss_view::RssConfigView,
-    error_handler::{ErrorHandlerActions, ErrorMessage},
+    error_handler::ErrorHandlerActions,
     loading_indicator::LoadingIndicator,
     main_view::MainView,
 };
@@ -30,7 +30,7 @@ pub struct ConfigProviderActions {
 impl ConfigProviderActions {
     pub fn reload_config(&self) {
         self.error_handler_actions
-            .handle_result(self.config_sender.send(ConfigProviderMessage::Reload));
+            .handle_result(self.config_sender.send(ConfigProviderMessage::Reload), true);
     }
 
     pub async fn reload_config_async(&self) {
@@ -39,18 +39,19 @@ impl ConfigProviderActions {
                 self.config_sender
                     .send_async(ConfigProviderMessage::Reload)
                     .await,
+                true,
             )
             .await;
     }
 
     delegate! {
         to self.error_handler_actions {
-            pub fn error(&self, error: ErrorMessage);
-            pub async fn error_async(&self, error: ErrorMessage);
             pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub async fn redraw_or_error_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>);
-            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>);
+            pub fn handle_error<E: Display>(&self, error: E, ignorable: bool);
+            pub async fn handle_error_async<E: Display>(&self, error: E, ignorable: bool);
+            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
+            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub fn redraw(&self);
             pub async fn redraw_async(&self);
             pub fn redraw_fn(&self) -> impl Fn();

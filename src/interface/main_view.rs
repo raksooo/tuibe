@@ -1,7 +1,6 @@
 use super::{
     component::{Component, Frame},
     config_provider::ConfigProviderActions,
-    error_handler::ErrorMessage,
     feed_view::FeedView,
 };
 use crate::config::{common::CommonConfigHandler, Video};
@@ -25,8 +24,10 @@ pub struct MainViewActions {
 #[allow(dead_code)]
 impl MainViewActions {
     pub fn close_config_view(&self) {
-        self.config_provider_actions
-            .handle_result(self.main_view_sender.send(MainViewMessage::CloseConfig));
+        self.config_provider_actions.handle_result(
+            self.main_view_sender.send(MainViewMessage::CloseConfig),
+            false,
+        );
     }
 
     pub async fn close_config_view_async(&self) {
@@ -35,18 +36,19 @@ impl MainViewActions {
                 self.main_view_sender
                     .send_async(MainViewMessage::CloseConfig)
                     .await,
+                false,
             )
             .await;
     }
 
     delegate! {
         to self.config_provider_actions {
-            pub fn error(&self, error: ErrorMessage);
-            pub async fn error_async(&self, error: ErrorMessage);
             pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub async fn redraw_or_error_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>);
-            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>);
+            pub fn handle_error<E: Display>(&self, error: E, ignorable: bool);
+            pub async fn handle_error_async<E: Display>(&self, error: E, ignorable: bool);
+            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
+            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
             pub fn redraw(&self);
             pub async fn redraw_async(&self);
             pub fn redraw_fn(&self) -> impl Fn();
