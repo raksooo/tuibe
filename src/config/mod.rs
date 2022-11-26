@@ -2,6 +2,7 @@ pub mod common;
 pub mod error;
 pub mod rss;
 
+pub mod config_message_channel;
 mod file_handler;
 
 use crate::config::error::ConfigError;
@@ -16,8 +17,8 @@ pub trait Config {
     where
         Self: Sized;
 
-    async fn fetch(&self) -> Result<(), ConfigError>;
-    fn videos(&self) -> Vec<Video>;
+    fn subscribe(&self) -> config_message_channel::ConfigReceiver;
+    fn refetch(&self);
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]

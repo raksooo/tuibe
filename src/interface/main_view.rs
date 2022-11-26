@@ -1,65 +1,17 @@
 use super::{
     component::{Component, Frame},
-    config_provider::ConfigProviderActions,
+    error_handler::ErrorHandlerActions,
     feed_view::FeedView,
 };
-use crate::config::{common::CommonConfigHandler, Video};
+use crate::config::{common::CommonConfigHandler, Config};
 
-use crossterm::event::{Event, KeyCode, KeyEvent};
-use delegate::delegate;
+use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
-use std::{fmt::Display, sync::Arc};
+use std::sync::Arc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
-pub enum MainViewMessage {
-    CloseConfig,
-}
-
-#[derive(Clone)]
-pub struct MainViewActions {
-    config_provider_actions: ConfigProviderActions,
-    main_view_sender: flume::Sender<MainViewMessage>,
-}
-
-#[allow(dead_code)]
-impl MainViewActions {
-    pub fn close_config_view(&self) {
-        self.config_provider_actions.handle_result(
-            self.main_view_sender.send(MainViewMessage::CloseConfig),
-            false,
-        );
-    }
-
-    pub async fn close_config_view_async(&self) {
-        self.config_provider_actions
-            .handle_result_async(
-                self.main_view_sender
-                    .send_async(MainViewMessage::CloseConfig)
-                    .await,
-                false,
-            )
-            .await;
-    }
-
-    delegate! {
-        to self.config_provider_actions {
-            pub fn redraw_or_error<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub async fn redraw_or_error_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub fn handle_error<E: Display>(&self, error: E, ignorable: bool);
-            pub async fn handle_error_async<E: Display>(&self, error: E, ignorable: bool);
-            pub fn handle_result<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub async fn handle_result_async<T, E: Display>(&self, result: Result<T, E>, ignorable: bool);
-            pub fn redraw(&self);
-            pub async fn redraw_async(&self);
-            pub fn redraw_fn(&self) -> impl Fn();
-            pub fn reload_config(&self);
-            pub async fn reload_config_async(&self);
-        }
-    }
-}
-
 pub struct MainView {
-    actions: MainViewActions,
+    actions: ErrorHandlerActions,
 
     show_config: Arc<Mutex<bool>>,
 
@@ -69,47 +21,21 @@ pub struct MainView {
 
 impl MainView {
     pub fn new<C, CF>(
-        config_provider_actions: ConfigProviderActions,
+        actions: ErrorHandlerActions,
         common_config: CommonConfigHandler,
-        videos: Vec<Video>,
+        config: Arc<impl Config + Send + Sync + 'static>,
         config_creator: CF,
     ) -> Self
     where
         C: Component + Send + 'static,
-        CF: FnOnce(MainViewActions) -> C,
+        CF: FnOnce(ErrorHandlerActions) -> C,
     {
-        let (main_view_sender, main_view_receiver) = flume::unbounded();
-        let actions = MainViewActions {
-            config_provider_actions,
-            main_view_sender,
-        };
-
-        let new_main_view = Self {
+        Self {
             show_config: Arc::new(Mutex::new(false)),
-
-            feed: FeedView::new(actions.clone(), common_config, videos),
+            feed: FeedView::new(actions.clone(), common_config, config),
             config: Box::new(config_creator(actions.clone())),
-
             actions,
-        };
-
-        new_main_view.listen_main_view_msg(main_view_receiver);
-        new_main_view
-    }
-
-    fn listen_main_view_msg(&self, main_view_receiver: flume::Receiver<MainViewMessage>) {
-        let show_config = self.show_config.clone();
-        let actions = self.actions.clone();
-
-        tokio::spawn(async move {
-            while let Ok(MainViewMessage::CloseConfig) = main_view_receiver.recv_async().await {
-                {
-                    let mut show_config = show_config.lock();
-                    *show_config = false;
-                }
-                actions.reload_config_async().await;
-            }
-        });
+        }
     }
 }
 
@@ -138,8 +64,14 @@ impl Component for MainView {
 
     fn handle_event(&mut self, event: Event) {
         if *self.show_config.lock() {
-            self.config.handle_event(event);
-        } else if event == Event::Key(KeyEvent::from(KeyCode::Char('c'))) {
+            if matches!(event, Event::Key(event) if event.code == KeyCode::Esc) {
+                let mut show_config = self.show_config.lock();
+                *show_config = false;
+                self.actions.redraw();
+            } else {
+                self.config.handle_event(event);
+            }
+        } else if matches!(event, Event::Key(event) if event.code == KeyCode::Char('c')) {
             {
                 let mut show_config = self.show_config.lock();
                 *show_config = true;
@@ -152,7 +84,9 @@ impl Component for MainView {
 
     fn registered_events(&self) -> Vec<(String, String)> {
         if *self.show_config.lock() {
-            self.config.registered_events()
+            let mut events = vec![(String::from("Esc"), String::from("Back"))];
+            events.append(&mut self.config.registered_events());
+            events
         } else {
             let mut events = vec![(String::from("c"), String::from("Configure"))];
             events.append(&mut self.feed.registered_events());

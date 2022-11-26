@@ -2,9 +2,9 @@ use crate::{
     config::rss::RssConfigHandler,
     interface::{
         component::{Component, Frame},
+        error_handler::ErrorHandlerActions,
         list::generate_items,
         loading_indicator::LoadingIndicator,
-        main_view::MainViewActions,
     },
 };
 
@@ -18,24 +18,20 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    actions: MainViewActions,
+    actions: ErrorHandlerActions,
     rss_config: Arc<RssConfigHandler>,
     selected: usize,
     loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
 }
 
 impl RssConfigView {
-    pub fn new(actions: MainViewActions, rss_config: RssConfigHandler) -> Self {
+    pub fn new(actions: ErrorHandlerActions, rss_config: Arc<RssConfigHandler>) -> Self {
         Self {
             actions,
-            rss_config: Arc::new(rss_config),
+            rss_config,
             selected: 0,
             loading_indicator: Arc::new(Mutex::new(None)),
         }
-    }
-
-    fn close(&self) {
-        self.actions.close_config_view();
     }
 
     fn move_up(&mut self) {
@@ -116,7 +112,6 @@ impl Component for RssConfigView {
     fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(event) => match event.code {
-                KeyCode::Esc => self.close(),
                 KeyCode::Char('d') => self.remove_selected(),
                 KeyCode::Up => self.move_up(),
                 KeyCode::Down => self.move_down(),
@@ -131,7 +126,6 @@ impl Component for RssConfigView {
 
     fn registered_events(&self) -> Vec<(String, String)> {
         vec![
-            (String::from("Esc"), String::from("Close")),
             (String::from("j"), String::from("Down")),
             (String::from("k"), String::from("Up")),
             (String::from("Paste"), String::from("Add feed")),
