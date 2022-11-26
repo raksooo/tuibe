@@ -44,6 +44,13 @@ pub struct RssConfigHandler {
 
 impl RssConfigHandler {
     pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
+        {
+            let inner = self.inner.lock();
+            if inner.config.feeds.contains(&url.to_string()) {
+                return Ok(());
+            }
+        }
+
         Self::fetch_feed(url, self.inner.clone(), self.config_sender.clone()).await?;
         let new_config = {
             let mut inner = self.inner.lock();
@@ -121,7 +128,6 @@ impl RssConfigHandler {
         Self::parse_videos(&rss, inner.clone(), config_sender.clone()).await?;
 
         let mut inner = inner.lock();
-        inner.config.feeds.push(url.to_owned());
         let feed = Feed {
             title: rss.title().to_string(),
             url: url.to_owned(),
