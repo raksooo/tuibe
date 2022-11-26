@@ -25,11 +25,6 @@ impl Dialog {
             body: body.map(String::from),
         }
     }
-
-    pub fn update_text(&mut self, title: &str, body: Option<&str>) {
-        self.title = title.to_owned();
-        self.body = body.map(String::from);
-    }
 }
 
 impl Component for Dialog {

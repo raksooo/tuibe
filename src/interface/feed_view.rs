@@ -1,8 +1,8 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
-    error_handler::ErrorHandlerActions,
     list::generate_items,
+    loading_indicator::LoadingIndicatorActions,
 };
 use crate::config::{
     common::CommonConfigHandler, config_message_channel::ConfigMessage, Config, Video,
@@ -101,7 +101,8 @@ impl VideoList {
                     .mutate_vec(|videos| videos.retain(|video| !video.included_in_feed(&url)));
                 inner.current_index = inner.videos.first().map(|_| 0);
             }
-            ConfigMessage::Error(_) => (), // Handled by FeedView
+            ConfigMessage::FinishedFetching => (), // Handled by FeedView
+            ConfigMessage::Error(_) => (),         // Handled by FeedView
         }
     }
 
@@ -208,22 +209,24 @@ impl VideoList {
 }
 
 pub struct FeedView {
-    actions: Arc<ErrorHandlerActions>,
+    actions: LoadingIndicatorActions,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
+    loading_id: Arc<Mutex<Option<usize>>>,
     video_list: Arc<VideoList>,
 }
 
 impl FeedView {
     pub fn new(
-        actions: ErrorHandlerActions,
+        actions: LoadingIndicatorActions,
         common_config: CommonConfigHandler,
         config: Arc<impl Config + Send + Sync + 'static>,
     ) -> Self {
         let feed_view = Self {
-            actions: Arc::new(actions),
+            actions,
             common_config: Arc::new(common_config),
             playing: Arc::new(Mutex::new(false)),
+            loading_id: Default::default(),
             video_list: Arc::new(VideoList::new()),
         };
 
@@ -232,23 +235,52 @@ impl FeedView {
     }
 
     fn listen_config_messages(&self, config: Arc<impl Config + Send + Sync + 'static>) {
+        let loading_id = self.loading_id.clone();
         let actions = self.actions.clone();
         let common_config = self.common_config.clone();
         let video_list = self.video_list.clone();
         tokio::spawn(async move {
+            {
+                let mut loading_id = loading_id.lock();
+                *loading_id = Some(actions.start_loading());
+            }
+
             let mut receiver = config.subscribe();
             while let Ok(message) = receiver.recv().await {
-                if let ConfigMessage::Error(error) = message {
-                    actions.handle_error_async(error, true).await;
-                } else {
-                    video_list.handle_config_message(
-                        message,
-                        common_config.clone().last_played_timestamp(),
-                    );
-                    actions.redraw_async().await;
-                }
+                Self::handle_config_message(
+                    message,
+                    loading_id.clone(),
+                    actions.clone(),
+                    common_config.clone(),
+                    video_list.clone(),
+                )
+                .await;
             }
         });
+    }
+
+    async fn handle_config_message(
+        message: ConfigMessage,
+        loading_id: Arc<Mutex<Option<usize>>>,
+        actions: LoadingIndicatorActions,
+        common_config: Arc<CommonConfigHandler>,
+        video_list: Arc<VideoList>,
+    ) {
+        match message {
+            ConfigMessage::Error(error) => actions.handle_error_async(error, true).await,
+            ConfigMessage::FinishedFetching => {
+                let mut loading_id = loading_id.lock();
+                if let Some(loading_id) = *loading_id {
+                    actions.finish_loading(loading_id);
+                }
+                *loading_id = None;
+            }
+            _ => {
+                video_list
+                    .handle_config_message(message, common_config.clone().last_played_timestamp());
+                actions.redraw_async().await;
+            }
+        }
     }
 
     fn set_current_as_last_played(&mut self) {

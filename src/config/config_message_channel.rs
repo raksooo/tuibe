@@ -3,6 +3,7 @@ use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub enum ConfigMessage {
+    FinishedFetching,
     Clear,
     NewVideo(Video),
     RemoveVideosFrom(String),

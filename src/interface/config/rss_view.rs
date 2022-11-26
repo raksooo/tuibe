@@ -2,14 +2,12 @@ use crate::{
     config::rss::{Feed, RssConfigHandler},
     interface::{
         component::{Component, Frame},
-        error_handler::ErrorHandlerActions,
         list::generate_items,
-        loading_indicator::LoadingIndicator,
+        loading_indicator::LoadingIndicatorActions,
     },
 };
 
 use crossterm::event::{Event, KeyCode};
-use parking_lot::Mutex;
 use std::sync::Arc;
 use tui::{
     layout::Rect,
@@ -18,19 +16,17 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    actions: ErrorHandlerActions,
+    actions: LoadingIndicatorActions,
     rss_config: Arc<RssConfigHandler>,
     selected: usize,
-    loading_indicator: Arc<Mutex<Option<LoadingIndicator>>>,
 }
 
 impl RssConfigView {
-    pub fn new(actions: ErrorHandlerActions, rss_config: Arc<RssConfigHandler>) -> Self {
+    pub fn new(actions: LoadingIndicatorActions, rss_config: Arc<RssConfigHandler>) -> Self {
         Self {
             actions,
             rss_config,
             selected: 0,
-            loading_indicator: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -62,24 +58,15 @@ impl RssConfigView {
     }
 
     fn add_url(&self, url: &str) {
-        {
-            let mut loading_indicator = self.loading_indicator.lock();
-            *loading_indicator = Some(LoadingIndicator::new(self.actions.redraw_fn()));
-        }
-        self.actions.redraw();
+        let finish_loading = self.actions.loading();
 
         let url = url.to_owned();
         let rss_config = self.rss_config.clone();
         let actions = self.actions.clone();
-        let loading_indicator = self.loading_indicator.clone();
 
         tokio::spawn(async move {
-            {
-                let mut loading_indicator = loading_indicator.lock();
-                *loading_indicator = None;
-            }
-
             let add_result = rss_config.add_feed(&url).await;
+            finish_loading();
             actions.redraw_or_error_async(add_result, true).await;
         });
     }
@@ -103,10 +90,6 @@ impl Component for RssConfigView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let list = self.create_list(area);
         f.render_widget(list, area);
-
-        if let Some(ref mut loading_indicator) = *self.loading_indicator.lock() {
-            loading_indicator.draw(f, area);
-        }
     }
 
     fn handle_event(&mut self, event: Event) {

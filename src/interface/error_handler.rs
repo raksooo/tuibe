@@ -1,6 +1,7 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
+    loading_indicator::LoadingIndicator,
 };
 use crate::ui::ProgramActions;
 
@@ -107,16 +108,12 @@ impl ErrorHandlerActions {
 
 pub struct ErrorHandler {
     actions: ErrorHandlerActions,
-    child: Box<dyn Component>,
+    loading_indicator: LoadingIndicator,
     error: Arc<Mutex<Option<ErrorMessage>>>,
 }
 
 impl ErrorHandler {
-    pub fn new<C, CF>(program_actions: ProgramActions, child_creator: CF) -> Self
-    where
-        C: Component + 'static,
-        CF: FnOnce(ErrorHandlerActions) -> C,
-    {
+    pub fn new(program_actions: ProgramActions) -> Self {
         let (error_sender, error_receiver) = flume::unbounded();
 
         let actions = ErrorHandlerActions {
@@ -126,7 +123,7 @@ impl ErrorHandler {
 
         let new_error_handler = Self {
             actions: actions.clone(),
-            child: Box::new(child_creator(actions)),
+            loading_indicator: LoadingIndicator::new(actions),
             error: Arc::new(Mutex::new(None)),
         };
 
@@ -151,7 +148,7 @@ impl ErrorHandler {
 
 impl Component for ErrorHandler {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        self.child.draw(f, area);
+        self.loading_indicator.draw(f, area);
 
         if let Some(ref error) = *self.error.lock() {
             Dialog::new_with_body("An error occured", Some(&error.message)).draw(f, area);
@@ -166,7 +163,7 @@ impl Component for ErrorHandler {
                 self.actions.redraw();
             }
         } else {
-            self.child.handle_event(event);
+            self.loading_indicator.handle_event(event);
         }
     }
 
@@ -179,7 +176,7 @@ impl Component for ErrorHandler {
                 vec![]
             }
         } else {
-            self.child.registered_events()
+            self.loading_indicator.registered_events()
         }
     }
 }

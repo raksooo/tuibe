@@ -1,6 +1,5 @@
 use super::{
     component::{Component, Frame},
-    config_provider::ConfigProvider,
     error_handler::ErrorHandler,
 };
 use crate::ui::ProgramActions;
@@ -19,7 +18,7 @@ pub struct App {
 
 impl App {
     pub fn new(actions: ProgramActions) -> Self {
-        let error_handler = ErrorHandler::new(actions.clone(), ConfigProvider::new);
+        let error_handler = ErrorHandler::new(actions.clone());
 
         Self {
             actions,

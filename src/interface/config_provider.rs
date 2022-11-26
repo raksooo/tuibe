@@ -1,8 +1,7 @@
 use super::{
     component::{Component, Frame},
     config::rss_view::RssConfigView,
-    error_handler::ErrorHandlerActions,
-    loading_indicator::LoadingIndicator,
+    loading_indicator::LoadingIndicatorActions,
     main_view::MainView,
 };
 use crate::config::{
@@ -14,24 +13,17 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use tui::layout::Rect;
 
-enum Child {
-    Loading(LoadingIndicator),
-    Main(MainView),
-}
-
 #[derive(Clone)]
 pub struct ConfigProvider {
-    actions: ErrorHandlerActions,
-    child: Arc<Mutex<Child>>,
+    actions: LoadingIndicatorActions,
+    main_view: Arc<Mutex<Option<MainView>>>,
 }
 
 impl ConfigProvider {
-    pub fn new(actions: ErrorHandlerActions) -> Self {
+    pub fn new(actions: LoadingIndicatorActions) -> Self {
         let mut config_provider = Self {
-            actions: actions.clone(),
-            child: Arc::new(Mutex::new(Child::Loading(LoadingIndicator::new(
-                actions.redraw_fn(),
-            )))),
+            actions,
+            main_view: Arc::new(Mutex::new(None)),
         };
 
         config_provider.init_configs();
@@ -40,29 +32,31 @@ impl ConfigProvider {
 
     fn init_configs(&mut self) {
         let actions = self.actions.clone();
-        let child = self.child.clone();
+        let main_view = self.main_view.clone();
 
         tokio::spawn(async move {
-            let init_result = Self::init_configs_impl(actions.clone(), child).await;
+            let init_result = Self::init_configs_impl(actions.clone(), main_view).await;
             actions.redraw_or_error_async(init_result, false).await;
         });
     }
 
     async fn init_configs_impl(
-        actions: ErrorHandlerActions,
-        child: Arc<Mutex<Child>>,
+        actions: LoadingIndicatorActions,
+        main_view: Arc<Mutex<Option<MainView>>>,
     ) -> Result<(), ConfigError> {
+        let finished_loading = actions.loading();
         let (common_config, config) = Self::load_configs().await?;
         let config = Arc::new(config);
 
-        let mut child = child.lock();
-        *child = Child::Main(MainView::new(
+        let mut main_view = main_view.lock();
+        *main_view = Some(MainView::new(
             actions,
             common_config,
             config.clone(),
             |actions| RssConfigView::new(actions, config),
         ));
 
+        finished_loading();
         Ok(())
     }
 
@@ -75,23 +69,20 @@ impl ConfigProvider {
 
 impl Component for ConfigProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let mut child = self.child.lock();
-        match *child {
-            Child::Loading(ref mut loading_indicator) => &loading_indicator.draw(f, area),
-            Child::Main(ref mut main_view) => &main_view.draw(f, area),
-        };
+        if let Some(ref mut main_view) = *self.main_view.lock() {
+            main_view.draw(f, area);
+        }
     }
 
     fn handle_event(&mut self, event: Event) {
-        let mut child = self.child.lock();
-        if let Child::Main(ref mut main_view) = *child {
+        if let Some(ref mut main_view) = *self.main_view.lock() {
             main_view.handle_event(event);
         }
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
         let mut events = vec![];
-        if let Child::Main(ref mut main_view) = *self.child.lock() {
+        if let Some(ref mut main_view) = *self.main_view.lock() {
             events.append(&mut main_view.registered_events());
         }
         events

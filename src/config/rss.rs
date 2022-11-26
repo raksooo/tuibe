@@ -139,6 +139,8 @@ impl RssConfigHandler {
             data.feeds.push(feed);
         }
 
+        config_sender.send(ConfigMessage::FinishedFetching);
+
         Ok(())
     }
 
