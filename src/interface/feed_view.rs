@@ -1,6 +1,5 @@
 use super::{
     component::{Component, Frame},
-    dialog::Dialog,
     list::generate_items,
     status_label::{StatusLabelActions, LOADING_STRING},
 };
@@ -8,7 +7,7 @@ use crate::config::{
     common::CommonConfigHandler, config_message_channel::ConfigMessage, Config, Video,
 };
 
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use sorted_vec::SortedSet;
 use std::{env, process::Stdio, sync::Arc};
@@ -211,7 +210,6 @@ impl VideoList {
 pub struct FeedView {
     actions: StatusLabelActions,
     common_config: Arc<CommonConfigHandler>,
-    playing: Arc<Mutex<bool>>,
     loading_id: Arc<Mutex<Option<usize>>>,
     video_list: Arc<VideoList>,
 }
@@ -225,7 +223,6 @@ impl FeedView {
         let feed_view = Self {
             actions,
             common_config: Arc::new(common_config),
-            playing: Arc::new(Mutex::new(false)),
             loading_id: Default::default(),
             video_list: Arc::new(VideoList::new()),
         };
@@ -310,16 +307,10 @@ impl FeedView {
         let selected_videos = self.video_list.selected_videos();
 
         if let Some(newest_video) = selected_videos.first() {
+            let finish_status = self.actions.show_label("Playing...");
             self.update_last_played_timestamp(newest_video.timestamp());
 
-            {
-                let mut playing = self.playing.lock();
-                *playing = true;
-            }
-            self.actions.redraw();
-
             let player = self.get_player();
-            let playing = self.playing.clone();
             let actions = self.actions.clone();
             tokio::spawn(async move {
                 let videos = selected_videos.iter().map(|video| video.url());
@@ -330,10 +321,7 @@ impl FeedView {
                     .status()
                     .await;
 
-                {
-                    let mut playing = playing.lock();
-                    *playing = false;
-                }
+                finish_status();
                 actions.redraw_or_error_async(play_result, true).await;
             });
         }
@@ -344,10 +332,6 @@ impl FeedView {
             .skip_while(|arg| arg != "--player")
             .nth(1)
             .unwrap_or_else(|| self.common_config.player())
-    }
-
-    fn is_playing(&self) -> bool {
-        *self.playing.lock()
     }
 }
 
@@ -363,20 +347,10 @@ impl Component for FeedView {
 
         f.render_widget(list, list_area);
         f.render_widget(description, description_area);
-
-        if *self.playing.lock() {
-            Dialog::new("Playing selection.").draw(f, area);
-        }
     }
 
     fn handle_event(&mut self, event: Event) {
-        if self.is_playing() {
-            if event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
-                let mut playing = self.playing.lock();
-                *playing = false;
-                self.actions.redraw();
-            }
-        } else if let Event::Key(event) = event {
+        if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Up => self.video_list.move_up(),
                 KeyCode::Down => self.video_list.move_down(),
@@ -396,19 +370,15 @@ impl Component for FeedView {
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
-        if self.is_playing() {
-            vec![(String::from("Esc"), String::from("Close"))]
-        } else {
-            vec![
-                (String::from("j"), String::from("Down")),
-                (String::from("k"), String::from("Up")),
-                (String::from("g"), String::from("Top")),
-                (String::from("G"), String::from("Bottom")),
-                (String::from("Space"), String::from("Select")),
-                (String::from("p"), String::from("Play")),
-                (String::from("n"), String::from("Update last played")),
-                (String::from("a"), String::from("Deselect all")),
-            ]
-        }
+        vec![
+            (String::from("j"), String::from("Down")),
+            (String::from("k"), String::from("Up")),
+            (String::from("g"), String::from("Top")),
+            (String::from("G"), String::from("Bottom")),
+            (String::from("Space"), String::from("Select")),
+            (String::from("p"), String::from("Play")),
+            (String::from("n"), String::from("Update last played")),
+            (String::from("a"), String::from("Deselect all")),
+        ]
     }
 }

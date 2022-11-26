@@ -151,7 +151,7 @@ impl Component for ErrorHandler {
         self.loading_indicator.draw(f, area);
 
         if let Some(ref error) = *self.error.lock() {
-            Dialog::new_with_body("An error occured", Some(&error.message)).draw(f, area);
+            Dialog::new("An error occured", &error.message).draw(f, area);
         }
     }
 
