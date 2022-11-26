@@ -1,5 +1,5 @@
 use crate::{
-    config::rss::RssConfigHandler,
+    config::rss::{Feed, RssConfigHandler},
     interface::{
         component::{Component, Frame},
         error_handler::ErrorHandlerActions,
@@ -50,13 +50,7 @@ impl RssConfigView {
 
     fn remove_selected(&mut self) {
         // selected is always within the bounds of feeds
-        let url = self
-            .rss_config
-            .feeds()
-            .get(self.selected)
-            .unwrap()
-            .url
-            .clone();
+        let url = self.feeds().get(self.selected).unwrap().url.clone();
 
         let rss_config = self.rss_config.clone();
         let actions = self.actions.clone();
@@ -91,12 +85,17 @@ impl RssConfigView {
     }
 
     fn create_list(&self, area: Rect) -> List<'_> {
-        let mut feeds = self.rss_config.feeds();
-        feeds.sort();
+        let feeds = self.feeds();
         let items = generate_items(area, self.selected, feeds, |feed| feed.title);
         List::new(items)
             .block(Block::default().title("Feeds").borders(Borders::RIGHT))
             .style(Style::default().fg(Color::White))
+    }
+
+    fn feeds(&self) -> Vec<Feed> {
+        let mut feeds = self.rss_config.feeds();
+        feeds.sort();
+        feeds
     }
 }
 

@@ -27,6 +27,7 @@ pub struct Video {
     pub title: String,
     pub url: String,
     pub author: String,
+    pub feed_url: String,
     pub description: String,
     pub length: u32,
 }

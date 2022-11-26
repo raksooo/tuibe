@@ -101,6 +101,8 @@ impl RssConfigHandler {
 
             inner.config.clone()
         };
+        self.config_sender
+            .send(ConfigMessage::RemoveVideosFrom(url.to_string()));
 
         self.save(&new_config).await
     }
@@ -125,7 +127,7 @@ impl RssConfigHandler {
         config_sender: Arc<ConfigSender>,
     ) -> Result<(), ConfigError> {
         let rss = Self::fetch_rss(url).await?;
-        Self::parse_videos(&rss, inner.clone(), config_sender.clone()).await?;
+        Self::parse_videos(&rss, url, inner.clone(), config_sender.clone()).await?;
 
         let mut inner = inner.lock();
         let feed = Feed {
@@ -142,18 +144,26 @@ impl RssConfigHandler {
 
     async fn parse_videos(
         rss: &atom_syndication::Feed,
+        feed_url: &str,
         inner: Arc<Mutex<RssConfigHandlerInner>>,
         config_sender: Arc<ConfigSender>,
     ) -> Result<(), ConfigError> {
         let author = rss.title().as_str();
         rss.entries().iter().try_for_each(|entry| {
-            Self::parse_video(entry, author, inner.clone(), config_sender.clone())
+            Self::parse_video(
+                entry,
+                author,
+                feed_url,
+                inner.clone(),
+                config_sender.clone(),
+            )
         })
     }
 
     fn parse_video(
         entry: &Entry,
         author: &str,
+        feed_url: &str,
         inner: Arc<Mutex<RssConfigHandlerInner>>,
         config_sender: Arc<ConfigSender>,
     ) -> Result<(), ConfigError> {
@@ -181,6 +191,7 @@ impl RssConfigHandler {
             title: entry.title().to_string(),
             url,
             author: author.to_string(),
+            feed_url: feed_url.to_string(),
             description,
             length: 0,
             date: Reverse(date),

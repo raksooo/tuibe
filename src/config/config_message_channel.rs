@@ -5,7 +5,7 @@ use tokio::sync::broadcast;
 pub enum ConfigMessage {
     Clear,
     NewVideo(Video),
-    RemoveVideos(String),
+    RemoveVideosFrom(String),
     Error(String),
 }
 
