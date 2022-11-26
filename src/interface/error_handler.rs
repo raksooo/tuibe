@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     dialog::Dialog,
-    loading_indicator::LoadingIndicator,
+    status_label::StatusLabel,
 };
 use crate::ui::ProgramActions;
 
@@ -108,7 +108,7 @@ impl ErrorHandlerActions {
 
 pub struct ErrorHandler {
     actions: ErrorHandlerActions,
-    loading_indicator: LoadingIndicator,
+    loading_indicator: StatusLabel,
     error: Arc<Mutex<Option<ErrorMessage>>>,
 }
 
@@ -123,7 +123,7 @@ impl ErrorHandler {
 
         let new_error_handler = Self {
             actions: actions.clone(),
-            loading_indicator: LoadingIndicator::new(actions),
+            loading_indicator: StatusLabel::new(actions),
             error: Arc::new(Mutex::new(None)),
         };
 

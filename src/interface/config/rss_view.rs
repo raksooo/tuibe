@@ -3,7 +3,7 @@ use crate::{
     interface::{
         component::{Component, Frame},
         list::generate_items,
-        loading_indicator::LoadingIndicatorActions,
+        status_label::{StatusLabelActions, LOADING_STRING},
     },
 };
 
@@ -16,13 +16,13 @@ use tui::{
 };
 
 pub struct RssConfigView {
-    actions: LoadingIndicatorActions,
+    actions: StatusLabelActions,
     rss_config: Arc<RssConfigHandler>,
     selected: usize,
 }
 
 impl RssConfigView {
-    pub fn new(actions: LoadingIndicatorActions, rss_config: Arc<RssConfigHandler>) -> Self {
+    pub fn new(actions: StatusLabelActions, rss_config: Arc<RssConfigHandler>) -> Self {
         Self {
             actions,
             rss_config,
@@ -58,7 +58,7 @@ impl RssConfigView {
     }
 
     fn add_url(&self, url: &str) {
-        let finish_loading = self.actions.loading();
+        let finish_loading = self.actions.show_label(LOADING_STRING);
 
         let url = url.to_owned();
         let rss_config = self.rss_config.clone();

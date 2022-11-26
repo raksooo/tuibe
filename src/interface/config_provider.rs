@@ -1,8 +1,8 @@
 use super::{
     component::{Component, Frame},
     config::rss_view::RssConfigView,
-    loading_indicator::LoadingIndicatorActions,
     main_view::MainView,
+    status_label::{StatusLabelActions, LOADING_STRING},
 };
 use crate::config::{
     common::CommonConfigHandler, error::ConfigError, rss::RssConfigHandler, Config,
@@ -15,12 +15,12 @@ use tui::layout::Rect;
 
 #[derive(Clone)]
 pub struct ConfigProvider {
-    actions: LoadingIndicatorActions,
+    actions: StatusLabelActions,
     main_view: Arc<Mutex<Option<MainView>>>,
 }
 
 impl ConfigProvider {
-    pub fn new(actions: LoadingIndicatorActions) -> Self {
+    pub fn new(actions: StatusLabelActions) -> Self {
         let mut config_provider = Self {
             actions,
             main_view: Arc::new(Mutex::new(None)),
@@ -41,10 +41,10 @@ impl ConfigProvider {
     }
 
     async fn init_configs_impl(
-        actions: LoadingIndicatorActions,
+        actions: StatusLabelActions,
         main_view: Arc<Mutex<Option<MainView>>>,
     ) -> Result<(), ConfigError> {
-        let finished_loading = actions.loading();
+        let finished_loading = actions.show_label(LOADING_STRING);
         let (common_config, config) = Self::load_configs().await?;
         let config = Arc::new(config);
 

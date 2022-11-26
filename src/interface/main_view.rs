@@ -1,7 +1,7 @@
 use super::{
     component::{Component, Frame},
     feed_view::FeedView,
-    loading_indicator::LoadingIndicatorActions,
+    status_label::StatusLabelActions,
 };
 use crate::config::{common::CommonConfigHandler, Config};
 
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub struct MainView {
-    actions: LoadingIndicatorActions,
+    actions: StatusLabelActions,
 
     show_config: Arc<Mutex<bool>>,
 
@@ -21,14 +21,14 @@ pub struct MainView {
 
 impl MainView {
     pub fn new<C, CF>(
-        actions: LoadingIndicatorActions,
+        actions: StatusLabelActions,
         common_config: CommonConfigHandler,
         config: Arc<impl Config + Send + Sync + 'static>,
         config_creator: CF,
     ) -> Self
     where
         C: Component + Send + 'static,
-        CF: FnOnce(LoadingIndicatorActions) -> C,
+        CF: FnOnce(StatusLabelActions) -> C,
     {
         Self {
             show_config: Arc::new(Mutex::new(false)),

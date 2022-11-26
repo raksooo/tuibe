@@ -2,7 +2,7 @@ use super::{
     component::{Component, Frame},
     dialog::Dialog,
     list::generate_items,
-    loading_indicator::LoadingIndicatorActions,
+    status_label::{StatusLabelActions, LOADING_STRING},
 };
 use crate::config::{
     common::CommonConfigHandler, config_message_channel::ConfigMessage, Config, Video,
@@ -209,7 +209,7 @@ impl VideoList {
 }
 
 pub struct FeedView {
-    actions: LoadingIndicatorActions,
+    actions: StatusLabelActions,
     common_config: Arc<CommonConfigHandler>,
     playing: Arc<Mutex<bool>>,
     loading_id: Arc<Mutex<Option<usize>>>,
@@ -218,7 +218,7 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(
-        actions: LoadingIndicatorActions,
+        actions: StatusLabelActions,
         common_config: CommonConfigHandler,
         config: Arc<impl Config + Send + Sync + 'static>,
     ) -> Self {
@@ -242,7 +242,7 @@ impl FeedView {
         tokio::spawn(async move {
             {
                 let mut loading_id = loading_id.lock();
-                *loading_id = Some(actions.start_loading());
+                *loading_id = Some(actions.start_status(LOADING_STRING));
             }
 
             let mut receiver = config.subscribe();
@@ -262,7 +262,7 @@ impl FeedView {
     async fn handle_config_message(
         message: ConfigMessage,
         loading_id: Arc<Mutex<Option<usize>>>,
-        actions: LoadingIndicatorActions,
+        actions: StatusLabelActions,
         common_config: Arc<CommonConfigHandler>,
         video_list: Arc<VideoList>,
     ) {
@@ -271,7 +271,7 @@ impl FeedView {
             ConfigMessage::FinishedFetching => {
                 let mut loading_id = loading_id.lock();
                 if let Some(loading_id) = *loading_id {
-                    actions.finish_loading(loading_id);
+                    actions.finish_status(loading_id);
                 }
                 *loading_id = None;
             }

@@ -7,29 +7,31 @@ use super::{
 use crossterm::event::Event;
 use delegate::delegate;
 use parking_lot::Mutex;
-use std::{fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 use tui::{
     layout::Rect,
     style::{Color, Style},
     widgets::Paragraph,
 };
 
-enum LoadingIndicatorMessage {
-    Start(usize),
-    Stop(usize),
+pub const LOADING_STRING: &str = "Loading...";
+
+enum StatusLabelMessage {
+    Show(usize, String),
+    Remove(usize),
 }
 
 #[derive(Clone)]
-pub struct LoadingIndicatorActions {
+pub struct StatusLabelActions {
     error_handler_actions: ErrorHandlerActions,
-    loading_sender: flume::Sender<LoadingIndicatorMessage>,
+    status_label_sender: flume::Sender<StatusLabelMessage>,
 
     id_counter: Arc<Mutex<usize>>,
 }
 
 #[allow(dead_code)]
-impl LoadingIndicatorActions {
-    pub fn start_loading(&self) -> usize {
+impl StatusLabelActions {
+    pub fn start_status(&self, label: &str) -> usize {
         let id = {
             let mut id_counter = self.id_counter.lock();
             *id_counter += 1;
@@ -37,24 +39,26 @@ impl LoadingIndicatorActions {
         };
 
         self.handle_result(
-            self.loading_sender.send(LoadingIndicatorMessage::Start(id)),
+            self.status_label_sender
+                .send(StatusLabelMessage::Show(id, label.to_owned())),
             true,
         );
 
         id
     }
 
-    pub fn finish_loading(&self, id: usize) {
+    pub fn finish_status(&self, id: usize) {
         self.handle_result(
-            self.loading_sender.send(LoadingIndicatorMessage::Stop(id)),
+            self.status_label_sender
+                .send(StatusLabelMessage::Remove(id)),
             true,
         );
     }
 
-    pub fn loading(&self) -> impl FnOnce() {
-        let id = self.start_loading();
+    pub fn show_label(&self, label: &str) -> impl FnOnce() {
+        let id = self.start_status(label);
         let self_clone = self.clone();
-        move || self_clone.finish_loading(id)
+        move || self_clone.finish_status(id)
     }
 
     delegate! {
@@ -73,48 +77,46 @@ impl LoadingIndicatorActions {
 }
 
 #[derive(Clone)]
-pub struct LoadingIndicator {
-    loading_ids: Arc<Mutex<Vec<usize>>>,
-    actions: Arc<LoadingIndicatorActions>,
+pub struct StatusLabel {
+    status_labels: Arc<Mutex<HashMap<usize, String>>>,
+    actions: Arc<StatusLabelActions>,
     config_provider: ConfigProvider,
 }
 
-impl LoadingIndicator {
+impl StatusLabel {
     pub fn new(error_handler_actions: ErrorHandlerActions) -> Self {
         let (sender, receiver) = flume::unbounded();
-        let actions = LoadingIndicatorActions {
+        let actions = StatusLabelActions {
             error_handler_actions,
-            loading_sender: sender,
+            status_label_sender: sender,
             id_counter: Arc::new(Mutex::new(0)),
         };
 
-        let loading_indicator = Self {
-            loading_ids: Default::default(),
+        let status_label = Self {
+            status_labels: Default::default(),
             actions: Arc::new(actions.clone()),
             config_provider: ConfigProvider::new(actions),
         };
 
-        loading_indicator.listen_loading_message(receiver);
-        loading_indicator
+        status_label.listen_status_label_message(receiver);
+        status_label
     }
 
-    fn listen_loading_message(&self, loading_receiver: flume::Receiver<LoadingIndicatorMessage>) {
+    fn listen_status_label_message(&self, receiver: flume::Receiver<StatusLabelMessage>) {
         let actions = self.actions.clone();
-        let loading_ids = self.loading_ids.clone();
+        let status_labels = self.status_labels.clone();
         tokio::spawn(async move {
-            while let Ok(message) = loading_receiver.recv_async().await {
+            while let Ok(message) = receiver.recv_async().await {
                 match message {
-                    LoadingIndicatorMessage::Start(id) => {
+                    StatusLabelMessage::Show(id, label) => {
                         {
-                            let mut loading_ids = loading_ids.lock();
-                            loading_ids.push(id);
+                            status_labels.lock().insert(id, label);
                         }
                         actions.redraw_async().await;
                     }
-                    LoadingIndicatorMessage::Stop(id) => {
+                    StatusLabelMessage::Remove(id) => {
                         {
-                            let mut loading_ids = loading_ids.lock();
-                            loading_ids.retain(|value| value != &id);
+                            status_labels.lock().remove(&id);
                         }
                         actions.redraw_async().await;
                     }
@@ -124,10 +126,12 @@ impl LoadingIndicator {
     }
 }
 
-impl Component for LoadingIndicator {
+impl Component for StatusLabel {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        if !self.loading_ids.lock().is_empty() {
-            let text = "Loading...";
+        let status_labels = self.status_labels.lock();
+        if !status_labels.is_empty() {
+            let labels: Vec<&str> = status_labels.values().map(|label| label.as_ref()).collect();
+            let text: &str = &labels.join(", ");
             let label = Paragraph::new(text).style(Style::default().fg(Color::White));
             let text_length = u16::try_from(text.len()).unwrap();
             let label_area = Rect {
