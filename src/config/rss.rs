@@ -18,7 +18,7 @@ pub struct RssConfig {
     pub feeds: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Feed {
     pub title: String,
     pub url: String,

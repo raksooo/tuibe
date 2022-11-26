@@ -91,7 +91,8 @@ impl RssConfigView {
     }
 
     fn create_list(&self, area: Rect) -> List<'_> {
-        let feeds = self.rss_config.feeds();
+        let mut feeds = self.rss_config.feeds();
+        feeds.sort();
         let items = generate_items(area, self.selected, feeds, |feed| feed.title);
         List::new(items)
             .block(Block::default().title("Feeds").borders(Borders::RIGHT))
