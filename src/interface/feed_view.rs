@@ -74,14 +74,14 @@ impl VideoList {
         }))
     }
 
-    pub fn handle_config_message(&self, message: ConfigMessage, last_played_timestamp: i64) {
+    pub fn handle_config_message(&self, message: ConfigMessage<Video>, last_played_timestamp: i64) {
         match message {
             ConfigMessage::Clear => {
                 let mut inner = self.0.lock();
                 inner.current_index = None;
                 inner.videos.clear();
             }
-            ConfigMessage::NewVideo(video) => {
+            ConfigMessage::New(video) => {
                 let mut inner = self.0.lock();
                 inner.current_index = inner.current_index.or(Some(0));
                 let video_list_item = VideoListItem::new(video, last_played_timestamp);
@@ -89,7 +89,7 @@ impl VideoList {
                     .videos
                     .mutate_vec(|videos| videos.push(video_list_item));
             }
-            ConfigMessage::RemoveVideo(Video { url, .. }) => {
+            ConfigMessage::Remove(Video { url, .. }) => {
                 let mut inner = self.0.lock();
                 inner
                     .videos
@@ -253,7 +253,7 @@ impl FeedView {
     }
 
     async fn handle_config_message(
-        message: ConfigMessage,
+        message: ConfigMessage<Video>,
         loading_id: Arc<Mutex<Option<usize>>>,
         actions: StatusLabelActions,
         common_config: Arc<CommonConfigHandler>,

@@ -17,7 +17,7 @@ pub trait Config {
     where
         Self: Sized;
 
-    fn subscribe(&self) -> config_message_channel::ConfigReceiver;
+    fn subscribe(&self) -> config_message_channel::ConfigReceiver<Video>;
     fn refetch(&self);
 }
 
