@@ -7,7 +7,7 @@ pub enum ConfigMessage {
     FinishedFetching,
     Clear,
     NewVideo(Video),
-    RemoveVideosFrom(String),
+    RemoveVideo(Video),
     Error(String),
 }
 

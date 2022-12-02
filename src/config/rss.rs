@@ -97,12 +97,20 @@ impl RssConfigHandler {
 
             if let Some(ref mut data) = inner.data {
                 data.feeds.retain(|feed| feed.url != url);
+                data.videos.retain(|video| {
+                    let keep = video.feed_url != url;
+
+                    if !keep {
+                        self.config_sender
+                            .send(ConfigMessage::RemoveVideo(video.clone()));
+                    }
+
+                    keep
+                });
             }
 
             inner.config.clone()
         };
-        self.config_sender
-            .send(ConfigMessage::RemoveVideosFrom(url.to_string()));
 
         self.save(&new_config).await
     }

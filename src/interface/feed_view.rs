@@ -57,10 +57,6 @@ impl VideoListItem {
     pub fn url(&self) -> String {
         self.video.url.clone()
     }
-
-    pub fn included_in_feed(&self, url: &str) -> bool {
-        self.video.feed_url == url
-    }
 }
 
 struct VideoListInner {
@@ -93,11 +89,11 @@ impl VideoList {
                     .videos
                     .mutate_vec(|videos| videos.push(video_list_item));
             }
-            ConfigMessage::RemoveVideosFrom(url) => {
+            ConfigMessage::RemoveVideo(Video { url, .. }) => {
                 let mut inner = self.0.lock();
                 inner
                     .videos
-                    .mutate_vec(|videos| videos.retain(|video| !video.included_in_feed(&url)));
+                    .mutate_vec(|videos| videos.retain(|video| video.url() != url));
                 inner.current_index = inner.videos.first().map(|_| 0);
             }
             ConfigMessage::FinishedFetching => (), // Handled by FeedView
