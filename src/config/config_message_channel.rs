@@ -1,5 +1,6 @@
 use super::Video;
-use tokio::sync::broadcast;
+use parking_lot::Mutex;
+use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub enum ConfigMessage {
@@ -11,39 +12,47 @@ pub enum ConfigMessage {
 }
 
 pub struct ConfigReceiver {
-    receiver: broadcast::Receiver<ConfigMessage>,
+    receiver: mpsc::UnboundedReceiver<ConfigMessage>,
     videos: Box<dyn Iterator<Item = Video> + Send + Sync>,
 }
 
 impl ConfigReceiver {
-    pub fn new(videos: Vec<Video>, receiver: broadcast::Receiver<ConfigMessage>) -> Self {
+    pub fn new(videos: Vec<Video>, receiver: mpsc::UnboundedReceiver<ConfigMessage>) -> Self {
         Self {
             videos: Box::new(videos.into_iter()),
             receiver,
         }
     }
 
-    pub async fn recv(&mut self) -> Result<ConfigMessage, broadcast::error::RecvError> {
+    pub async fn recv(&mut self) -> Option<ConfigMessage> {
         if let Some(video) = self.videos.next() {
-            Ok(ConfigMessage::NewVideo(video))
+            Some(ConfigMessage::NewVideo(video))
         } else {
             self.receiver.recv().await
         }
     }
 }
 
-pub struct ConfigSender(broadcast::Sender<ConfigMessage>);
+pub struct ConfigSender {
+    senders: Mutex<Vec<mpsc::UnboundedSender<ConfigMessage>>>,
+}
 
 impl ConfigSender {
-    pub fn new(sender: broadcast::Sender<ConfigMessage>) -> Self {
-        Self(sender)
+    pub fn new() -> Self {
+        Self {
+            senders: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn send(&self, message: ConfigMessage) {
-        let _ = self.0.send(message);
+        let mut senders = self.senders.lock();
+        senders.retain(|sender| sender.send(message.clone()).is_ok());
     }
 
     pub fn subscribe(&self, videos: Vec<Video>) -> ConfigReceiver {
-        ConfigReceiver::new(videos, self.0.subscribe())
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let mut senders = self.senders.lock();
+        senders.push(sender);
+        ConfigReceiver::new(videos, receiver)
     }
 }

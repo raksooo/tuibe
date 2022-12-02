@@ -243,7 +243,7 @@ impl FeedView {
             }
 
             let mut receiver = config.subscribe();
-            while let Ok(message) = receiver.recv().await {
+            while let Some(message) = receiver.recv().await {
                 Self::handle_config_message(
                     message,
                     loading_id.clone(),

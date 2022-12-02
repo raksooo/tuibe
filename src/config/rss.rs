@@ -9,7 +9,7 @@ use atom_syndication::Entry;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Reverse, sync::Arc};
-use tokio::{fs, sync::broadcast};
+use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
 
@@ -239,13 +239,12 @@ impl Config for RssConfigHandler {
         let mut file_handler = ConfigFileHandler::from_config_file(CONFIG_NAME).await?;
         let config = file_handler.read().await?;
 
-        let (sender, _) = broadcast::channel(10000);
         let inner = RssConfigHandlerInner { config, data: None };
 
         Ok(Self {
             inner: Arc::new(Mutex::new(inner)),
             file_handler: tokio::sync::Mutex::new(file_handler),
-            config_sender: Arc::new(ConfigSender::new(sender)),
+            config_sender: Arc::new(ConfigSender::new()),
         })
     }
 
