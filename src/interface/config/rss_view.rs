@@ -1,5 +1,8 @@
 use crate::{
-    config::rss::{Feed, RssConfigHandler},
+    config::{
+        config_message_channel::ConfigMessage,
+        rss::{Feed, RssConfigHandler},
+    },
     interface::{
         component::{Component, Frame},
         list::generate_items,
@@ -8,6 +11,7 @@ use crate::{
 };
 
 use crossterm::event::{Event, KeyCode};
+use parking_lot::Mutex;
 use std::sync::Arc;
 use tui::{
     layout::Rect,
@@ -18,16 +22,56 @@ use tui::{
 pub struct RssConfigView {
     actions: StatusLabelActions,
     rss_config: Arc<RssConfigHandler>,
+    feeds: Arc<Mutex<Vec<Feed>>>,
     selected: usize,
 }
 
 impl RssConfigView {
     pub fn new(actions: StatusLabelActions, rss_config: Arc<RssConfigHandler>) -> Self {
-        Self {
+        let rss_config_view = Self {
             actions,
-            rss_config,
+            rss_config: rss_config.clone(),
+            feeds: Arc::new(Mutex::new(Vec::new())),
             selected: 0,
+        };
+
+        rss_config_view.listen_config_messages(rss_config);
+        rss_config_view
+    }
+
+    fn listen_config_messages(&self, config: Arc<RssConfigHandler>) {
+        let actions = self.actions.clone();
+        let feeds = self.feeds.clone();
+        tokio::spawn(async move {
+            let mut receiver = config.subscribe_feeds();
+            while let Some(message) = receiver.recv().await {
+                Self::handle_config_message(message, actions.clone(), feeds.clone()).await;
+            }
+        });
+    }
+
+    async fn handle_config_message(
+        message: ConfigMessage<Feed>,
+        actions: StatusLabelActions,
+        feeds: Arc<Mutex<Vec<Feed>>>,
+    ) {
+        match message {
+            ConfigMessage::Error(_) => (), // Errors should be handled through feed_view
+            ConfigMessage::FinishedFetching => (), // Not necessary since there's no indicator
+            ConfigMessage::New(feed) => {
+                let mut feeds = feeds.lock();
+                feeds.push(feed);
+            }
+            ConfigMessage::Remove(feed) => {
+                let mut feeds = feeds.lock();
+                feeds.retain(|current| current != &feed);
+            }
+            ConfigMessage::Clear => {
+                let mut feeds = feeds.lock();
+                feeds.clear();
+            }
         }
+        actions.redraw_async().await;
     }
 
     fn move_up(&mut self) {
@@ -38,7 +82,8 @@ impl RssConfigView {
     }
 
     fn move_down(&mut self) {
-        if self.selected + 1 < self.rss_config.feeds().len() {
+        let feeds = self.feeds.lock();
+        if self.selected + 1 < feeds.len() {
             self.selected += 1;
             self.actions.redraw();
         }
@@ -46,7 +91,8 @@ impl RssConfigView {
 
     fn remove_selected(&mut self) {
         // selected is always within the bounds of feeds
-        let url = self.feeds().get(self.selected).unwrap().url.clone();
+        let feeds = self.feeds.lock();
+        let url = feeds.get(self.selected).unwrap().url.clone();
 
         let rss_config = self.rss_config.clone();
         let actions = self.actions.clone();
@@ -72,17 +118,11 @@ impl RssConfigView {
     }
 
     fn create_list(&self, area: Rect) -> List<'_> {
-        let feeds = self.feeds();
+        let feeds = self.feeds.lock().to_vec();
         let items = generate_items(area, self.selected, feeds, |feed| feed.title);
         List::new(items)
             .block(Block::default().title("Feeds").borders(Borders::RIGHT))
             .style(Style::default().fg(Color::White))
-    }
-
-    fn feeds(&self) -> Vec<Feed> {
-        let mut feeds = self.rss_config.feeds();
-        feeds.sort();
-        feeds
     }
 }
 
