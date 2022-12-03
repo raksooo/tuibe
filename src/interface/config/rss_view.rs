@@ -5,7 +5,7 @@ use crate::{
     },
     interface::{
         component::{Component, Frame},
-        list::generate_items,
+        list::{List, Same},
         status_label::{StatusLabelActions, LOADING_STRING},
     },
 };
@@ -16,14 +16,25 @@ use std::sync::Arc;
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List},
+    widgets::{Block, Borders, ListItem},
 };
+
+impl From<Feed> for ListItem<'static> {
+    fn from(value: Feed) -> Self {
+        ListItem::new(format!("  {}", value.title))
+    }
+}
+
+impl Same for Feed {
+    fn same(&self, other: &Self) -> bool {
+        self.url == other.url
+    }
+}
 
 pub struct RssConfigView {
     actions: StatusLabelActions,
     rss_config: Arc<RssConfigHandler>,
-    feeds: Arc<Mutex<Vec<Feed>>>,
-    selected: usize,
+    list: Arc<Mutex<List<Feed>>>,
 }
 
 impl RssConfigView {
@@ -31,8 +42,7 @@ impl RssConfigView {
         let rss_config_view = Self {
             actions,
             rss_config: rss_config.clone(),
-            feeds: Arc::new(Mutex::new(Vec::new())),
-            selected: 0,
+            list: Arc::new(Mutex::new(List::new())),
         };
 
         rss_config_view.listen_config_messages(rss_config);
@@ -41,11 +51,11 @@ impl RssConfigView {
 
     fn listen_config_messages(&self, config: Arc<RssConfigHandler>) {
         let actions = self.actions.clone();
-        let feeds = self.feeds.clone();
+        let list = self.list.clone();
         tokio::spawn(async move {
             let mut receiver = config.subscribe_feeds();
             while let Some(message) = receiver.recv().await {
-                Self::handle_config_message(message, actions.clone(), feeds.clone()).await;
+                Self::handle_config_message(message, actions.clone(), list.clone()).await;
             }
         });
     }
@@ -53,54 +63,28 @@ impl RssConfigView {
     async fn handle_config_message(
         message: ConfigMessage<Feed>,
         actions: StatusLabelActions,
-        feeds: Arc<Mutex<Vec<Feed>>>,
+        list: Arc<Mutex<List<Feed>>>,
     ) {
         match message {
-            ConfigMessage::Error(_) => (), // Errors should be handled through feed_view
-            ConfigMessage::FinishedFetching => (), // Not necessary since there's no indicator
-            ConfigMessage::New(feed) => {
-                let mut feeds = feeds.lock();
-                feeds.push(feed);
-            }
-            ConfigMessage::Remove(feed) => {
-                let mut feeds = feeds.lock();
-                feeds.retain(|current| current != &feed);
-            }
-            ConfigMessage::Clear => {
-                let mut feeds = feeds.lock();
-                feeds.clear();
-            }
+            ConfigMessage::Error(_) => return, // Errors should be handled through feed_view
+            ConfigMessage::FinishedFetching => return, // Not necessary since there's no indicator
+            ConfigMessage::New(feed) => list.lock().add(feed),
+            ConfigMessage::Remove(feed) => list.lock().remove(&feed),
+            ConfigMessage::Clear => list.lock().clear(),
         }
         actions.redraw_async().await;
     }
 
-    fn move_up(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
-            self.actions.redraw();
-        }
-    }
-
-    fn move_down(&mut self) {
-        let feeds = self.feeds.lock();
-        if self.selected + 1 < feeds.len() {
-            self.selected += 1;
-            self.actions.redraw();
-        }
-    }
-
     fn remove_selected(&mut self) {
-        // selected is always within the bounds of feeds
-        let feeds = self.feeds.lock();
-        let url = feeds.get(self.selected).unwrap().url.clone();
+        if let Some(feed) = self.list.lock().get_current_item() {
+            let rss_config = self.rss_config.clone();
+            let actions = self.actions.clone();
 
-        let rss_config = self.rss_config.clone();
-        let actions = self.actions.clone();
-
-        tokio::spawn(async move {
-            let remove_result = rss_config.remove_feed(&url).await;
-            actions.redraw_or_error_async(remove_result, true).await;
-        });
+            tokio::spawn(async move {
+                let remove_result = rss_config.remove_feed(&feed.url).await;
+                actions.redraw_or_error_async(remove_result, true).await;
+            });
+        }
     }
 
     fn add_url(&self, url: &str) {
@@ -116,35 +100,33 @@ impl RssConfigView {
             actions.redraw_or_error_async(add_result, true).await;
         });
     }
-
-    fn create_list(&self, area: Rect) -> List<'_> {
-        let feeds = self.feeds.lock().to_vec();
-        let items = generate_items(area, self.selected, feeds, |feed| feed.title);
-        List::new(items)
-            .block(Block::default().title("Feeds").borders(Borders::RIGHT))
-            .style(Style::default().fg(Color::White))
-    }
 }
 
 impl Component for RssConfigView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let list = self.create_list(area);
-        f.render_widget(list, area);
+        let list = self.list.lock();
+        let list = list.list(area.height.into());
+        let styled_list = list
+            .block(Block::default().title("Feeds").borders(Borders::RIGHT))
+            .style(Style::default().fg(Color::White));
+        f.render_widget(styled_list, area);
     }
 
     fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(event) => match event.code {
                 KeyCode::Char('d') => self.remove_selected(),
-                KeyCode::Up => self.move_up(),
-                KeyCode::Down => self.move_down(),
-                KeyCode::Char('j') => self.move_down(),
-                KeyCode::Char('k') => self.move_up(),
-                _ => (),
+                KeyCode::Up => self.list.lock().move_up(),
+                KeyCode::Down => self.list.lock().move_down(),
+                KeyCode::Char('j') => self.list.lock().move_down(),
+                KeyCode::Char('k') => self.list.lock().move_up(),
+                _ => return,
             },
             Event::Paste(url) => self.add_url(&url),
-            _ => (),
+            _ => return,
         }
+
+        self.actions.redraw();
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {

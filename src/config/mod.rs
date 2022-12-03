@@ -36,18 +36,4 @@ impl Video {
     pub fn date(&self) -> DateTime<FixedOffset> {
         self.date.0
     }
-
-    pub fn label(&self, width: usize) -> String {
-        // Subtract width of datetime and horizontal padding and checkmark.
-        let width = width - 16 - 2 - 2;
-        // Split the area between title and author 3/4 for author.
-        let title_width = 3 * width / 4;
-        let author_width = width - title_width;
-
-        let date = self.date.0.format("%Y-%m-%d %H:%M");
-        let title = self.title.get(..title_width).unwrap_or(&self.title);
-        let author = self.author.get(..author_width).unwrap_or(&self.author);
-
-        format!("{title:title_width$} {author:>author_width$} - {date} ")
-    }
 }
