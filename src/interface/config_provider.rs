@@ -45,11 +45,13 @@ impl ConfigProvider {
         main_view: Arc<Mutex<Option<MainView>>>,
     ) -> Result<(), BackendError> {
         let finished_loading = actions.show_label(LOADING_STRING);
-        let (config, backend) = Self::load_configs().await?;
+        let config = ConfigHandler::load().await?;
+        let backend = Self::load_backend().await?;
         let backend = Arc::new(backend);
 
         let mut main_view = main_view.lock();
         *main_view = Some(MainView::new(actions, config, backend.clone(), |actions| {
+            // TODO: Initialize the correct backend view
             RssBackendView::new(actions, backend)
         }));
 
@@ -57,10 +59,9 @@ impl ConfigProvider {
         Ok(())
     }
 
-    async fn load_configs() -> Result<(ConfigHandler, RssBackend), BackendError> {
-        let config = ConfigHandler::load().await?;
-        let backend = RssBackend::load().await?;
-        Ok((config, backend))
+    async fn load_backend() -> Result<RssBackend, BackendError> {
+        // TODO: Load the correct backend
+        RssBackend::load().await
     }
 }
 
