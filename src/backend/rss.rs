@@ -1,17 +1,39 @@
 use super::{
     channel::{BackendMessage, BackendReceiver, BackendSender},
-    Backend, Video,
+    Backend, BackendError, Video,
 };
 use crate::{config_error::ConfigError, file_handler::ConfigFileHandler};
 
 use async_trait::async_trait;
 use atom_syndication::Entry;
+use err_derive::Error;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Reverse, sync::Arc};
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
+
+#[derive(Debug, Error)]
+pub enum RssBackendError {
+    #[error(display = "Failed to fetch RSS feed")]
+    FetchFeed(#[error(from)] reqwest::Error),
+
+    #[error(display = "Failed to join fetch handles")]
+    JoinFetchTasks(#[error(from)] tokio::task::JoinError),
+
+    #[error(display = "Failed to read RSS feed: {}", _0)]
+    ReadFeed(#[error(from)] atom_syndication::Error),
+
+    #[error(display = "Failed to parse video")]
+    ParseVideo,
+
+    #[error(display = "Failed to read subscriptions file: {}", _0)]
+    ReadYoutubeTakeout(#[error(source, no_from)] std::io::Error),
+
+    #[error(display = "Failed to parse YouTube takeout")]
+    ParseYoutubeTakeout,
+}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct RssConfig {
@@ -44,7 +66,7 @@ pub struct RssBackend {
 }
 
 impl RssBackend {
-    pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
+    pub async fn add_feed(&self, url: &str) -> Result<(), BackendError> {
         {
             let inner = self.inner.lock();
             if inner.config.feeds.contains(&url.to_string()) {
@@ -65,13 +87,14 @@ impl RssBackend {
             inner.config.clone()
         };
 
-        self.save(&rss_backend).await
+        self.save(&rss_backend).await?;
+        Ok(())
     }
 
-    pub async fn import_youtube(&self, path: &str) -> Result<(), ConfigError> {
+    pub async fn import_youtube(&self, path: &str) -> Result<(), BackendError> {
         let content = fs::read_to_string(&path)
             .await
-            .map_err(ConfigError::ReadYoutubeTakeout)?;
+            .map_err(RssBackendError::ReadYoutubeTakeout)?;
         let mut urls: Vec<String> = content
             .trim()
             .split('\n')
@@ -80,13 +103,13 @@ impl RssBackend {
                 let channel_id = line
                     .split(',')
                     .next()
-                    .ok_or(ConfigError::ParseYoutubeTakeout)?;
+                    .ok_or(RssBackendError::ParseYoutubeTakeout)?;
                 Ok(format!(
                     "https://www.youtube.com/feeds/videos.xml?channel_id={}",
                     channel_id
                 ))
             })
-            .collect::<Result<Vec<_>, ConfigError>>()?;
+            .collect::<Result<Vec<_>, RssBackendError>>()?;
 
         let config = {
             let mut inner = self.inner.lock();
@@ -94,10 +117,11 @@ impl RssBackend {
             inner.config.clone()
         };
 
-        self.save(&config).await
+        self.save(&config).await?;
+        Ok(())
     }
 
-    pub async fn remove_feed(&self, url: &str) -> Result<(), ConfigError> {
+    pub async fn remove_feed(&self, url: &str) -> Result<(), BackendError> {
         let new_config = {
             let mut inner = self.inner.lock();
             inner.config.feeds.retain(|feed| feed != url);
@@ -123,7 +147,8 @@ impl RssBackend {
             inner.config.clone()
         };
 
-        self.save(&new_config).await
+        self.save(&new_config).await?;
+        Ok(())
     }
 
     pub fn subscribe_feeds(&self) -> BackendReceiver<Feed> {
@@ -136,7 +161,7 @@ impl RssBackend {
         self.feed_sender.subscribe(feeds)
     }
 
-    async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, ConfigError> {
+    async fn fetch_rss(url: &str) -> Result<atom_syndication::Feed, RssBackendError> {
         let content = reqwest::get(url).await?.bytes().await?;
         Ok(atom_syndication::Feed::read_from(&content[..])?)
     }
@@ -146,7 +171,7 @@ impl RssBackend {
         inner: Arc<Mutex<RssBackendInner>>,
         video_sender: Arc<BackendSender<Video>>,
         feed_sender: Arc<BackendSender<Feed>>,
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), RssBackendError> {
         let rss = Self::fetch_rss(url).await?;
         Self::parse_videos(&rss, url, inner.clone(), video_sender.clone()).await?;
 
@@ -172,7 +197,7 @@ impl RssBackend {
         feed_url: &str,
         inner: Arc<Mutex<RssBackendInner>>,
         video_sender: Arc<BackendSender<Video>>,
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), RssBackendError> {
         let author = rss.title().as_str();
         rss.entries().iter().try_for_each(|entry| {
             Self::parse_video(entry, author, feed_url, inner.clone(), video_sender.clone())
@@ -185,7 +210,7 @@ impl RssBackend {
         feed_url: &str,
         inner: Arc<Mutex<RssBackendInner>>,
         video_sender: Arc<BackendSender<Video>>,
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), RssBackendError> {
         let description = entry
             .extensions()
             .get("media")
@@ -200,11 +225,14 @@ impl RssBackend {
         let url = entry
             .links()
             .first()
-            .ok_or(ConfigError::ParseVideo)?
+            .ok_or(RssBackendError::ParseVideo)?
             .href()
             .to_string();
 
-        let date = entry.published().ok_or(ConfigError::ParseVideo)?.to_owned();
+        let date = entry
+            .published()
+            .ok_or(RssBackendError::ParseVideo)?
+            .to_owned();
 
         let video = Video {
             title: entry.title().to_string(),
@@ -244,7 +272,7 @@ impl RssBackend {
                 match Self::fetch_feed(&url, inner, video_sender.clone(), feed_sender.clone()).await
                 {
                     Ok(()) => (),
-                    Err(ConfigError::ReadFeed { .. }) => (),
+                    Err(RssBackendError::ReadFeed { .. }) => (),
                     Err(error) => video_sender.send(BackendMessage::Error(error.to_string())),
                 }
             });
@@ -254,7 +282,7 @@ impl RssBackend {
 
 #[async_trait]
 impl Backend for RssBackend {
-    async fn load() -> Result<Self, ConfigError> {
+    async fn load() -> Result<Self, BackendError> {
         let mut file_handler = ConfigFileHandler::from_config_file(CONFIG_NAME).await?;
         let config = file_handler.read().await?;
 

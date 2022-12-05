@@ -4,9 +4,8 @@ use super::{
     main_view::MainView,
     status_label::{StatusLabelActions, LOADING_STRING},
 };
-use crate::backend::{rss::RssBackend, Backend};
+use crate::backend::{rss::RssBackend, Backend, BackendError};
 use crate::config::ConfigHandler;
-use crate::config_error::ConfigError;
 
 use crossterm::event::Event;
 use parking_lot::Mutex;
@@ -43,7 +42,7 @@ impl ConfigProvider {
     async fn init_configs_impl(
         actions: StatusLabelActions,
         main_view: Arc<Mutex<Option<MainView>>>,
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), BackendError> {
         let finished_loading = actions.show_label(LOADING_STRING);
         let (config, backend) = Self::load_configs().await?;
         let backend = Arc::new(backend);
@@ -57,7 +56,7 @@ impl ConfigProvider {
         Ok(())
     }
 
-    async fn load_configs() -> Result<(ConfigHandler, RssBackend), ConfigError> {
+    async fn load_configs() -> Result<(ConfigHandler, RssBackend), BackendError> {
         let config = ConfigHandler::load().await?;
         let backend = RssBackend::load().await?;
         Ok((config, backend))

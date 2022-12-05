@@ -22,22 +22,4 @@ pub enum ConfigError {
 
     #[error(display = "Failed to write to config file")]
     WriteConfigFile(#[error(source, no_from)] std::io::Error),
-
-    #[error(display = "Failed to fetch RSS feed")]
-    FetchFeed(#[error(from)] reqwest::Error),
-
-    #[error(display = "Failed to join fetch handles")]
-    JoinFetchTasks(#[error(from)] tokio::task::JoinError),
-
-    #[error(display = "Failed to read RSS feed: {}", _0)]
-    ReadFeed(#[error(from)] atom_syndication::Error),
-
-    #[error(display = "Failed to parse video")]
-    ParseVideo,
-
-    #[error(display = "Failed to read subscriptions file: {}", _0)]
-    ReadYoutubeTakeout(#[error(source, no_from)] std::io::Error),
-
-    #[error(display = "Failed to parse YouTube takeout")]
-    ParseYoutubeTakeout,
 }
