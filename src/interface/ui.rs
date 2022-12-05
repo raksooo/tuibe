@@ -49,7 +49,8 @@ where
                 }
             },
 
-            event = ui_receiver.recv_async() => match event? {
+            // Delay recv by 8ms to make drawing cap at ~120 fps
+            event = delayed_recv(&ui_receiver, 8) => match event? {
                 UiMessage::Quit => break,
                 UiMessage::Redraw => {
                     let drained = ui_receiver.drain();
@@ -63,9 +64,6 @@ where
 
                     debug!("Redrawing");
                     perform_draw(terminal, &mut root)?;
-
-                    // Wait a few milliseconds to prevent to many consecutive redraws
-                    Delay::new(Duration::from_millis(5)).await;
                 }
             },
         };
@@ -73,6 +71,11 @@ where
     info!("Exiting");
 
     Ok(())
+}
+
+async fn delayed_recv<T>(receiver: &flume::Receiver<T>, delay: u64) -> Result<T, flume::RecvError> {
+    Delay::new(Duration::from_millis(delay)).await;
+    receiver.recv_async().await
 }
 
 fn perform_draw(
