@@ -325,12 +325,12 @@ impl Component for FeedView {
             list_area.height - 1,
         );
 
-        let list = video_list.list(area.height.into());
+        let list = video_list.list(list_area.height.into());
         let styled_list = list
             .block(Block::default().title("Videos"))
             .style(Style::default().fg(Color::White));
 
-        let metadata_list = video_list.metadata_list(area.height.into());
+        let metadata_list = video_list.metadata_list(list_area.height.into());
         let styled_metadata_list = metadata_list
             .block(Block::default())
             .style(Style::default().fg(Color::White));
