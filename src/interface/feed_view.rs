@@ -3,9 +3,8 @@ use super::{
     list::{List, Same},
     status_label::{StatusLabelActions, LOADING_STRING},
 };
-use crate::config::{
-    common::CommonConfigHandler, config_message_channel::ConfigMessage, Config, Video,
-};
+use crate::backend::{channel::BackendMessage, Backend, Video};
+use crate::config::ConfigHandler;
 
 use chrono::{DateTime, FixedOffset};
 use crossterm::event::{Event, KeyCode};
@@ -88,20 +87,20 @@ impl VideoList {
         Self(List::new())
     }
 
-    pub fn handle_config_message(
+    pub fn handle_backend_message(
         &mut self,
-        message: ConfigMessage<Video>,
+        message: BackendMessage<Video>,
         last_played_timestamp: i64,
     ) {
         match message {
-            ConfigMessage::Clear => self.0.clear(),
-            ConfigMessage::New(video) => {
+            BackendMessage::Clear => self.0.clear(),
+            BackendMessage::New(video) => {
                 let video_list_item = VideoListItem::new(video, last_played_timestamp);
                 self.0.add(video_list_item);
             }
-            ConfigMessage::Remove(video) => self.0.remove(&video.into()),
-            ConfigMessage::FinishedFetching => (), // Handled by FeedView
-            ConfigMessage::Error(_) => (),         // Handled by FeedView
+            BackendMessage::Remove(video) => self.0.remove(&video.into()),
+            BackendMessage::FinishedFetching => (), // Handled by FeedView
+            BackendMessage::Error(_) => (),         // Handled by FeedView
         }
     }
 
@@ -168,7 +167,7 @@ impl VideoList {
 
 pub struct FeedView {
     actions: StatusLabelActions,
-    common_config: Arc<CommonConfigHandler>,
+    config: Arc<ConfigHandler>,
     loading_id: Arc<Mutex<Option<usize>>>,
     video_list: Arc<Mutex<VideoList>>,
 }
@@ -176,24 +175,24 @@ pub struct FeedView {
 impl FeedView {
     pub fn new(
         actions: StatusLabelActions,
-        common_config: CommonConfigHandler,
-        config: Arc<impl Config + Send + Sync + 'static>,
+        config: ConfigHandler,
+        backend: Arc<impl Backend + Send + Sync + 'static>,
     ) -> Self {
         let feed_view = Self {
             actions,
-            common_config: Arc::new(common_config),
+            config: Arc::new(config),
             loading_id: Default::default(),
             video_list: Arc::new(Mutex::new(VideoList::new())),
         };
 
-        feed_view.listen_config_messages(config);
+        feed_view.listen_backend_messages(backend);
         feed_view
     }
 
-    fn listen_config_messages(&self, config: Arc<impl Config + Send + Sync + 'static>) {
+    fn listen_backend_messages(&self, backend: Arc<impl Backend + Send + Sync + 'static>) {
         let loading_id = self.loading_id.clone();
         let actions = self.actions.clone();
-        let common_config = self.common_config.clone();
+        let config = self.config.clone();
         let video_list = self.video_list.clone();
         tokio::spawn(async move {
             {
@@ -201,13 +200,13 @@ impl FeedView {
                 *loading_id = Some(actions.start_status(LOADING_STRING));
             }
 
-            let mut receiver = config.subscribe();
+            let mut receiver = backend.subscribe();
             while let Some(message) = receiver.recv().await {
-                Self::handle_config_message(
+                Self::handle_backend_message(
                     message,
                     loading_id.clone(),
                     actions.clone(),
-                    common_config.clone(),
+                    config.clone(),
                     video_list.clone(),
                 )
                 .await;
@@ -215,16 +214,16 @@ impl FeedView {
         });
     }
 
-    async fn handle_config_message(
-        message: ConfigMessage<Video>,
+    async fn handle_backend_message(
+        message: BackendMessage<Video>,
         loading_id: Arc<Mutex<Option<usize>>>,
         actions: StatusLabelActions,
-        common_config: Arc<CommonConfigHandler>,
+        config: Arc<ConfigHandler>,
         video_list: Arc<Mutex<VideoList>>,
     ) {
         match message {
-            ConfigMessage::Error(error) => actions.handle_error_async(error, true).await,
-            ConfigMessage::FinishedFetching => {
+            BackendMessage::Error(error) => actions.handle_error_async(error, true).await,
+            BackendMessage::FinishedFetching => {
                 let mut loading_id = loading_id.lock();
                 if let Some(loading_id) = *loading_id {
                     actions.finish_status(loading_id);
@@ -234,10 +233,8 @@ impl FeedView {
             _ => {
                 {
                     let mut video_list = video_list.lock();
-                    video_list.handle_config_message(
-                        message,
-                        common_config.clone().last_played_timestamp(),
-                    );
+                    video_list
+                        .handle_backend_message(message, config.clone().last_played_timestamp());
                 }
                 actions.redraw_async().await;
             }
@@ -256,12 +253,12 @@ impl FeedView {
                 .update_last_played_timestamp(last_played_timestamp);
         }
 
-        let common_config = self.common_config.clone();
+        let config = self.config.clone();
         let actions = self.actions.clone();
         tokio::spawn(async move {
             actions
                 .redraw_or_error_async(
-                    common_config
+                    config
                         .set_last_played_timestamp(last_played_timestamp)
                         .await,
                     true,
@@ -298,7 +295,7 @@ impl FeedView {
         env::args()
             .skip_while(|arg| arg != "--player")
             .nth(1)
-            .unwrap_or_else(|| self.common_config.player())
+            .unwrap_or_else(|| self.config.player())
     }
 }
 

@@ -1,5 +1,5 @@
 use super::file_handler::ConfigFileHandler;
-use crate::config::error::ConfigError;
+use crate::config_error::ConfigError;
 
 use chrono::Utc;
 use parking_lot::Mutex;
@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 const CONFIG_NAME: &str = "config";
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct CommonConfig {
+pub struct Config {
     pub player: String,
     pub last_played_timestamp: i64,
 }
 
-impl Default for CommonConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             player: String::from("mpv"),
@@ -22,12 +22,12 @@ impl Default for CommonConfig {
     }
 }
 
-pub struct CommonConfigHandler {
-    pub config: Mutex<CommonConfig>,
-    file_handler: tokio::sync::Mutex<ConfigFileHandler<CommonConfig>>,
+pub struct ConfigHandler {
+    pub config: Mutex<Config>,
+    file_handler: tokio::sync::Mutex<ConfigFileHandler<Config>>,
 }
 
-impl CommonConfigHandler {
+impl ConfigHandler {
     pub async fn load() -> Result<Self, ConfigError> {
         let mut file_handler = ConfigFileHandler::from_config_file(CONFIG_NAME).await?;
         let config = file_handler.read().await?;

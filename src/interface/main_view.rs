@@ -3,7 +3,8 @@ use super::{
     feed_view::FeedView,
     status_label::StatusLabelActions,
 };
-use crate::config::{common::CommonConfigHandler, Config};
+use crate::backend::Backend;
+use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
@@ -13,27 +14,27 @@ use tui::layout::{Constraint, Direction, Layout, Rect};
 pub struct MainView {
     actions: StatusLabelActions,
 
-    show_config: Arc<Mutex<bool>>,
+    show_backend_view: Arc<Mutex<bool>>,
 
     feed: FeedView,
-    config: Box<dyn Component + Send>,
+    backend_view: Box<dyn Component + Send>,
 }
 
 impl MainView {
     pub fn new<C, CF>(
         actions: StatusLabelActions,
-        common_config: CommonConfigHandler,
-        config: Arc<impl Config + Send + Sync + 'static>,
-        config_creator: CF,
+        config: ConfigHandler,
+        backend: Arc<impl Backend + Send + Sync + 'static>,
+        backend_view_creator: CF,
     ) -> Self
     where
         C: Component + Send + 'static,
         CF: FnOnce(StatusLabelActions) -> C,
     {
         Self {
-            show_config: Arc::new(Mutex::new(false)),
-            feed: FeedView::new(actions.clone(), common_config, config),
-            config: Box::new(config_creator(actions.clone())),
+            show_backend_view: Arc::new(Mutex::new(false)),
+            feed: FeedView::new(actions.clone(), config, backend),
+            backend_view: Box::new(backend_view_creator(actions.clone())),
             actions,
         }
     }
@@ -41,40 +42,40 @@ impl MainView {
 
 impl Component for MainView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
-        let show_config = self.show_config.lock();
-        let config_numerator = u32::from(*show_config);
+        let show_backend_view = self.show_backend_view.lock();
+        let backend_view_numerator = u32::from(*show_backend_view);
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Ratio(config_numerator, 2),
-                    Constraint::Ratio(2 - config_numerator, 2),
+                    Constraint::Ratio(backend_view_numerator, 2),
+                    Constraint::Ratio(2 - backend_view_numerator, 2),
                 ]
                 .as_ref(),
             )
             .split(area);
 
-        if *show_config {
-            self.config.draw(f, chunks[0]);
+        if *show_backend_view {
+            self.backend_view.draw(f, chunks[0]);
         }
 
         self.feed.draw(f, chunks[1]);
     }
 
     fn handle_event(&mut self, event: Event) {
-        if *self.show_config.lock() {
+        if *self.show_backend_view.lock() {
             if matches!(event, Event::Key(event) if event.code == KeyCode::Esc) {
-                let mut show_config = self.show_config.lock();
-                *show_config = false;
+                let mut show_backend_view = self.show_backend_view.lock();
+                *show_backend_view = false;
                 self.actions.redraw();
             } else {
-                self.config.handle_event(event);
+                self.backend_view.handle_event(event);
             }
         } else if matches!(event, Event::Key(event) if event.code == KeyCode::Char('c')) {
             {
-                let mut show_config = self.show_config.lock();
-                *show_config = true;
+                let mut show_backend_view = self.show_backend_view.lock();
+                *show_backend_view = true;
             }
             self.actions.redraw();
         } else {
@@ -83,9 +84,9 @@ impl Component for MainView {
     }
 
     fn registered_events(&self) -> Vec<(String, String)> {
-        if *self.show_config.lock() {
+        if *self.show_backend_view.lock() {
             let mut events = vec![(String::from("Esc"), String::from("Back"))];
-            events.append(&mut self.config.registered_events());
+            events.append(&mut self.backend_view.registered_events());
             events
         } else {
             let mut events = vec![(String::from("c"), String::from("Configure"))];

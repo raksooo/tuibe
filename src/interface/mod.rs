@@ -1,6 +1,6 @@
 pub mod ui;
 
-mod config;
+mod backend;
 
 pub mod app;
 mod config_provider;

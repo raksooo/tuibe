@@ -1,4 +1,4 @@
-use crate::config::error::ConfigError;
+use crate::config_error::ConfigError;
 
 use serde::{de::DeserializeOwned, Serialize};
 use std::{io, path::PathBuf};

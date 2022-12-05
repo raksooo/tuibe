@@ -127,11 +127,11 @@ impl ErrorHandler {
             error: Arc::new(Mutex::new(None)),
         };
 
-        new_error_handler.listen_error_msg(error_receiver);
+        new_error_handler.listen_error_messages(error_receiver);
         new_error_handler
     }
 
-    fn listen_error_msg(&self, error_receiver: flume::Receiver<ErrorMessage>) {
+    fn listen_error_messages(&self, error_receiver: flume::Receiver<ErrorMessage>) {
         let actions = self.actions.clone();
         let error = self.error.clone();
         tokio::spawn(async move {

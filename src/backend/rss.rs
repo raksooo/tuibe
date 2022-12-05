@@ -1,8 +1,8 @@
 use super::{
-    config_message_channel::{ConfigMessage, ConfigReceiver, ConfigSender},
-    file_handler::ConfigFileHandler,
+    channel::{BackendMessage, BackendReceiver, BackendSender},
+    Backend, Video,
 };
-use crate::config::{error::ConfigError, Config, Video};
+use crate::{config_error::ConfigError, file_handler::ConfigFileHandler};
 
 use async_trait::async_trait;
 use atom_syndication::Entry;
@@ -25,25 +25,25 @@ pub struct Feed {
 }
 
 #[derive(Clone, Default)]
-struct RssConfigHandlerData {
+struct RssBackendData {
     videos: Vec<Video>,
     feeds: Vec<Feed>,
 }
 
 #[derive(Clone)]
-struct RssConfigHandlerInner {
+struct RssBackendInner {
     config: RssConfig,
-    data: Option<RssConfigHandlerData>,
+    data: Option<RssBackendData>,
 }
 
-pub struct RssConfigHandler {
-    inner: Arc<Mutex<RssConfigHandlerInner>>,
+pub struct RssBackend {
+    inner: Arc<Mutex<RssBackendInner>>,
     file_handler: tokio::sync::Mutex<ConfigFileHandler<RssConfig>>,
-    video_sender: Arc<ConfigSender<Video>>,
-    feed_sender: Arc<ConfigSender<Feed>>,
+    video_sender: Arc<BackendSender<Video>>,
+    feed_sender: Arc<BackendSender<Feed>>,
 }
 
-impl RssConfigHandler {
+impl RssBackend {
     pub async fn add_feed(&self, url: &str) -> Result<(), ConfigError> {
         {
             let inner = self.inner.lock();
@@ -59,13 +59,13 @@ impl RssConfigHandler {
             self.feed_sender.clone(),
         )
         .await?;
-        let new_config = {
+        let rss_backend = {
             let mut inner = self.inner.lock();
             inner.config.feeds.push(url.to_owned());
             inner.config.clone()
         };
 
-        self.save(&new_config).await
+        self.save(&rss_backend).await
     }
 
     pub async fn import_youtube(&self, path: &str) -> Result<(), ConfigError> {
@@ -88,13 +88,13 @@ impl RssConfigHandler {
             })
             .collect::<Result<Vec<_>, ConfigError>>()?;
 
-        let new_config = {
+        let config = {
             let mut inner = self.inner.lock();
             inner.config.feeds.append(&mut urls);
             inner.config.clone()
         };
 
-        self.save(&new_config).await
+        self.save(&config).await
     }
 
     pub async fn remove_feed(&self, url: &str) -> Result<(), ConfigError> {
@@ -106,14 +106,15 @@ impl RssConfigHandler {
                 data.feeds.retain(|feed| {
                     let keep = feed.url != url;
                     if !keep {
-                        self.feed_sender.send(ConfigMessage::Remove(feed.clone()));
+                        self.feed_sender.send(BackendMessage::Remove(feed.clone()));
                     }
                     keep
                 });
                 data.videos.retain(|video| {
                     let keep = video.feed_url != url;
                     if !keep {
-                        self.video_sender.send(ConfigMessage::Remove(video.clone()));
+                        self.video_sender
+                            .send(BackendMessage::Remove(video.clone()));
                     }
                     keep
                 });
@@ -125,7 +126,7 @@ impl RssConfigHandler {
         self.save(&new_config).await
     }
 
-    pub fn subscribe_feeds(&self) -> ConfigReceiver<Feed> {
+    pub fn subscribe_feeds(&self) -> BackendReceiver<Feed> {
         let inner = self.inner.lock();
         let feeds = inner
             .data
@@ -142,9 +143,9 @@ impl RssConfigHandler {
 
     async fn fetch_feed(
         url: &str,
-        inner: Arc<Mutex<RssConfigHandlerInner>>,
-        video_sender: Arc<ConfigSender<Video>>,
-        feed_sender: Arc<ConfigSender<Feed>>,
+        inner: Arc<Mutex<RssBackendInner>>,
+        video_sender: Arc<BackendSender<Video>>,
+        feed_sender: Arc<BackendSender<Feed>>,
     ) -> Result<(), ConfigError> {
         let rss = Self::fetch_rss(url).await?;
         Self::parse_videos(&rss, url, inner.clone(), video_sender.clone()).await?;
@@ -155,13 +156,13 @@ impl RssConfigHandler {
             url: url.to_owned(),
         };
 
-        feed_sender.send(ConfigMessage::New(feed.clone()));
+        feed_sender.send(BackendMessage::New(feed.clone()));
         if let Some(ref mut data) = inner.data {
             data.feeds.push(feed);
         }
 
-        video_sender.send(ConfigMessage::FinishedFetching);
-        feed_sender.send(ConfigMessage::FinishedFetching);
+        video_sender.send(BackendMessage::FinishedFetching);
+        feed_sender.send(BackendMessage::FinishedFetching);
 
         Ok(())
     }
@@ -169,8 +170,8 @@ impl RssConfigHandler {
     async fn parse_videos(
         rss: &atom_syndication::Feed,
         feed_url: &str,
-        inner: Arc<Mutex<RssConfigHandlerInner>>,
-        video_sender: Arc<ConfigSender<Video>>,
+        inner: Arc<Mutex<RssBackendInner>>,
+        video_sender: Arc<BackendSender<Video>>,
     ) -> Result<(), ConfigError> {
         let author = rss.title().as_str();
         rss.entries().iter().try_for_each(|entry| {
@@ -182,8 +183,8 @@ impl RssConfigHandler {
         entry: &Entry,
         author: &str,
         feed_url: &str,
-        inner: Arc<Mutex<RssConfigHandlerInner>>,
-        video_sender: Arc<ConfigSender<Video>>,
+        inner: Arc<Mutex<RssBackendInner>>,
+        video_sender: Arc<BackendSender<Video>>,
     ) -> Result<(), ConfigError> {
         let description = entry
             .extensions()
@@ -215,7 +216,7 @@ impl RssConfigHandler {
             date: Reverse(date),
         };
 
-        video_sender.send(ConfigMessage::New(video.clone()));
+        video_sender.send(BackendMessage::New(video.clone()));
         if let Some(ref mut data) = inner.lock().data {
             data.videos.push(video);
         }
@@ -244,7 +245,7 @@ impl RssConfigHandler {
                 {
                     Ok(()) => (),
                     Err(ConfigError::ReadFeed { .. }) => (),
-                    Err(error) => video_sender.send(ConfigMessage::Error(error.to_string())),
+                    Err(error) => video_sender.send(BackendMessage::Error(error.to_string())),
                 }
             });
         }
@@ -252,22 +253,22 @@ impl RssConfigHandler {
 }
 
 #[async_trait]
-impl Config for RssConfigHandler {
+impl Backend for RssBackend {
     async fn load() -> Result<Self, ConfigError> {
         let mut file_handler = ConfigFileHandler::from_config_file(CONFIG_NAME).await?;
         let config = file_handler.read().await?;
 
-        let inner = RssConfigHandlerInner { config, data: None };
+        let inner = RssBackendInner { config, data: None };
 
         Ok(Self {
             inner: Arc::new(Mutex::new(inner)),
             file_handler: tokio::sync::Mutex::new(file_handler),
-            video_sender: Arc::new(ConfigSender::new()),
-            feed_sender: Arc::new(ConfigSender::new()),
+            video_sender: Arc::new(BackendSender::new()),
+            feed_sender: Arc::new(BackendSender::new()),
         })
     }
 
-    fn subscribe(&self) -> ConfigReceiver<Video> {
+    fn subscribe(&self) -> BackendReceiver<Video> {
         let videos = {
             let inner = self.inner.lock();
             inner
@@ -289,8 +290,8 @@ impl Config for RssConfigHandler {
                 data.feeds.clear();
                 data.videos.clear();
             }
-            self.video_sender.send(ConfigMessage::Clear);
-            self.feed_sender.send(ConfigMessage::Clear);
+            self.video_sender.send(BackendMessage::Clear);
+            self.feed_sender.send(BackendMessage::Clear);
         }
         self.fetch();
     }

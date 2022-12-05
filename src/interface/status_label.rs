@@ -98,11 +98,11 @@ impl StatusLabel {
             config_provider: ConfigProvider::new(actions),
         };
 
-        status_label.listen_status_label_message(receiver);
+        status_label.listen_status_label_messages(receiver);
         status_label
     }
 
-    fn listen_status_label_message(&self, receiver: flume::Receiver<StatusLabelMessage>) {
+    fn listen_status_label_messages(&self, receiver: flume::Receiver<StatusLabelMessage>) {
         let actions = self.actions.clone();
         let status_labels = self.status_labels.clone();
         tokio::spawn(async move {

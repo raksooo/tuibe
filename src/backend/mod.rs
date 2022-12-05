@@ -1,23 +1,20 @@
-pub mod common;
-pub mod error;
 pub mod rss;
 
-pub mod config_message_channel;
-mod file_handler;
+pub mod channel;
 
-use crate::config::error::ConfigError;
+use crate::config_error::ConfigError;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use std::cmp::Reverse;
 
 #[async_trait]
-pub trait Config {
+pub trait Backend {
     async fn load() -> Result<Self, ConfigError>
     where
         Self: Sized;
 
-    fn subscribe(&self) -> config_message_channel::ConfigReceiver<Video>;
+    fn subscribe(&self) -> channel::BackendReceiver<Video>;
     fn refetch(&self);
 }
 

@@ -1,7 +1,7 @@
 use crate::{
-    config::{
-        config_message_channel::ConfigMessage,
-        rss::{Feed, RssConfigHandler},
+    backend::{
+        channel::BackendMessage,
+        rss::{Feed, RssBackend},
     },
     interface::{
         component::{Component, Frame},
@@ -31,57 +31,57 @@ impl Same for Feed {
     }
 }
 
-pub struct RssConfigView {
+pub struct RssBackendView {
     actions: StatusLabelActions,
-    rss_config: Arc<RssConfigHandler>,
+    backend: Arc<RssBackend>,
     list: Arc<Mutex<List<Feed>>>,
 }
 
-impl RssConfigView {
-    pub fn new(actions: StatusLabelActions, rss_config: Arc<RssConfigHandler>) -> Self {
-        let rss_config_view = Self {
+impl RssBackendView {
+    pub fn new(actions: StatusLabelActions, backend: Arc<RssBackend>) -> Self {
+        let rss_backend_view = Self {
             actions,
-            rss_config: rss_config.clone(),
+            backend: backend.clone(),
             list: Arc::new(Mutex::new(List::new())),
         };
 
-        rss_config_view.listen_config_messages(rss_config);
-        rss_config_view
+        rss_backend_view.listen_backend_messages(backend);
+        rss_backend_view
     }
 
-    fn listen_config_messages(&self, config: Arc<RssConfigHandler>) {
+    fn listen_backend_messages(&self, backend: Arc<RssBackend>) {
         let actions = self.actions.clone();
         let list = self.list.clone();
         tokio::spawn(async move {
-            let mut receiver = config.subscribe_feeds();
+            let mut receiver = backend.subscribe_feeds();
             while let Some(message) = receiver.recv().await {
-                Self::handle_config_message(message, actions.clone(), list.clone()).await;
+                Self::handle_backend_message(message, actions.clone(), list.clone()).await;
             }
         });
     }
 
-    async fn handle_config_message(
-        message: ConfigMessage<Feed>,
+    async fn handle_backend_message(
+        message: BackendMessage<Feed>,
         actions: StatusLabelActions,
         list: Arc<Mutex<List<Feed>>>,
     ) {
         match message {
-            ConfigMessage::Error(_) => return, // Errors should be handled through feed_view
-            ConfigMessage::FinishedFetching => return, // Not necessary since there's no indicator
-            ConfigMessage::New(feed) => list.lock().add(feed),
-            ConfigMessage::Remove(feed) => list.lock().remove(&feed),
-            ConfigMessage::Clear => list.lock().clear(),
+            BackendMessage::Error(_) => return, // Errors should be handled through feed_view
+            BackendMessage::FinishedFetching => return, // Not necessary since there's no indicator
+            BackendMessage::New(feed) => list.lock().add(feed),
+            BackendMessage::Remove(feed) => list.lock().remove(&feed),
+            BackendMessage::Clear => list.lock().clear(),
         }
         actions.redraw_async().await;
     }
 
     fn remove_selected(&mut self) {
         if let Some(feed) = self.list.lock().get_current_item() {
-            let rss_config = self.rss_config.clone();
+            let backend = self.backend.clone();
             let actions = self.actions.clone();
 
             tokio::spawn(async move {
-                let remove_result = rss_config.remove_feed(&feed.url).await;
+                let remove_result = backend.remove_feed(&feed.url).await;
                 actions.redraw_or_error_async(remove_result, true).await;
             });
         }
@@ -91,18 +91,18 @@ impl RssConfigView {
         let finish_loading = self.actions.show_label(LOADING_STRING);
 
         let url = url.to_owned();
-        let rss_config = self.rss_config.clone();
+        let backend = self.backend.clone();
         let actions = self.actions.clone();
 
         tokio::spawn(async move {
-            let add_result = rss_config.add_feed(&url).await;
+            let add_result = backend.add_feed(&url).await;
             finish_loading();
             actions.redraw_or_error_async(add_result, true).await;
         });
     }
 }
 
-impl Component for RssConfigView {
+impl Component for RssBackendView {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         let list = self.list.lock();
         let list = list.list(area.height.into());

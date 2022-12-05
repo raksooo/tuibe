@@ -1,12 +1,12 @@
 use super::{
+    backend::rss_view::RssBackendView,
     component::{Component, Frame},
-    config::rss_view::RssConfigView,
     main_view::MainView,
     status_label::{StatusLabelActions, LOADING_STRING},
 };
-use crate::config::{
-    common::CommonConfigHandler, error::ConfigError, rss::RssConfigHandler, Config,
-};
+use crate::backend::{rss::RssBackend, Backend};
+use crate::config::ConfigHandler;
+use crate::config_error::ConfigError;
 
 use crossterm::event::Event;
 use parking_lot::Mutex;
@@ -45,25 +45,22 @@ impl ConfigProvider {
         main_view: Arc<Mutex<Option<MainView>>>,
     ) -> Result<(), ConfigError> {
         let finished_loading = actions.show_label(LOADING_STRING);
-        let (common_config, config) = Self::load_configs().await?;
-        let config = Arc::new(config);
+        let (config, backend) = Self::load_configs().await?;
+        let backend = Arc::new(backend);
 
         let mut main_view = main_view.lock();
-        *main_view = Some(MainView::new(
-            actions,
-            common_config,
-            config.clone(),
-            |actions| RssConfigView::new(actions, config),
-        ));
+        *main_view = Some(MainView::new(actions, config, backend.clone(), |actions| {
+            RssBackendView::new(actions, backend)
+        }));
 
         finished_loading();
         Ok(())
     }
 
-    async fn load_configs() -> Result<(CommonConfigHandler, RssConfigHandler), ConfigError> {
-        let common_config = CommonConfigHandler::load().await?;
-        let config = RssConfigHandler::load().await?;
-        Ok((common_config, config))
+    async fn load_configs() -> Result<(ConfigHandler, RssBackend), ConfigError> {
+        let config = ConfigHandler::load().await?;
+        let backend = RssBackend::load().await?;
+        Ok((config, backend))
     }
 }
 

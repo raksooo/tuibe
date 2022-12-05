@@ -1,9 +1,12 @@
+mod backend;
 mod config;
+mod config_error;
+mod file_handler;
 mod interface;
 
 use std::{fs::File, str::FromStr};
 
-use config::{rss::RssConfigHandler, Config};
+use backend::{rss::RssBackend, Backend};
 use interface::{app::App, ui};
 
 use crossterm::{
@@ -57,7 +60,7 @@ fn print_help() {
 
 async fn import_youtube_takeout(path: &str) {
     println!("Importing subscriptions...");
-    RssConfigHandler::load()
+    RssBackend::load()
         .await
         .expect("Failed to load config")
         .import_youtube(path)
