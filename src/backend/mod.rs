@@ -8,7 +8,6 @@ use rss::RssBackendError;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use err_derive::Error;
-use std::cmp::Reverse;
 
 #[derive(Debug, Error)]
 pub enum BackendError {
@@ -31,17 +30,11 @@ pub trait Backend {
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Video {
-    date: Reverse<DateTime<FixedOffset>>,
+    pub date: DateTime<FixedOffset>,
     pub title: String,
     pub url: String,
     pub author: String,
     pub feed_url: String,
     pub description: String,
     pub length: u32,
-}
-
-impl Video {
-    pub fn date(&self) -> DateTime<FixedOffset> {
-        self.date.0
-    }
 }

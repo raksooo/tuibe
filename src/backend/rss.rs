@@ -9,7 +9,7 @@ use atom_syndication::Entry;
 use err_derive::Error;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Reverse, sync::Arc};
+use std::sync::Arc;
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
@@ -241,7 +241,7 @@ impl RssBackend {
             feed_url: feed_url.to_string(),
             description,
             length: 0,
-            date: Reverse(date),
+            date,
         };
 
         video_sender.send(BackendMessage::New(video.clone()));

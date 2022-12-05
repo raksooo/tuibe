@@ -10,7 +10,7 @@ use chrono::{DateTime, FixedOffset};
 use crossterm::event::{Event, KeyCode};
 use delegate::delegate;
 use parking_lot::Mutex;
-use std::{env, process::Stdio, sync::Arc};
+use std::{cmp::Reverse, env, process::Stdio, sync::Arc};
 use tokio::process::Command;
 use tui::{
     layout::Rect,
@@ -20,14 +20,14 @@ use tui::{
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct VideoListItem {
-    video: Video,
+    video: Reverse<Video>,
     selected: bool,
 }
 
 impl From<VideoListItem> for ListItem<'static> {
     fn from(value: VideoListItem) -> Self {
         let selected = if value.selected { "✓" } else { " " };
-        ListItem::new(format!(" {selected} {}", value.video.title))
+        ListItem::new(format!(" {selected} {}", value.video.0.title))
     }
 }
 
@@ -39,14 +39,17 @@ impl From<Video> for VideoListItem {
 
 impl Same for VideoListItem {
     fn same(&self, other: &Self) -> bool {
-        self.video.url == other.video.url
+        self.video.0.url == other.video.0.url
     }
 }
 
 impl VideoListItem {
     pub fn new(video: Video, last_played_timestamp: i64) -> Self {
-        let selected = video.date().timestamp() > last_played_timestamp;
-        Self { video, selected }
+        let selected = video.date.timestamp() > last_played_timestamp;
+        Self {
+            video: Reverse(video),
+            selected,
+        }
     }
 
     pub fn toggle_selected(&mut self) {
@@ -61,22 +64,20 @@ impl VideoListItem {
         self.selected = self.date().timestamp() > last_played_timestamp;
     }
 
-    delegate! {
-        to self.video {
-            pub fn date(&self) -> DateTime<FixedOffset>;
-        }
+    pub fn date(&self) -> DateTime<FixedOffset> {
+        self.video.0.date
     }
 
     pub fn author(&self) -> String {
-        self.video.author.clone()
+        self.video.0.author.clone()
     }
 
     pub fn description(&self) -> String {
-        self.video.description.clone()
+        self.video.0.description.clone()
     }
 
     pub fn url(&self) -> String {
-        self.video.url.clone()
+        self.video.0.url.clone()
     }
 }
 
