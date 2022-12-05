@@ -1,8 +1,9 @@
 use super::{
+    actions::Actions,
     backend::rss_view::RssBackendView,
     component::{Component, Frame},
     main_view::MainView,
-    status_label::{StatusLabelActions, LOADING_STRING},
+    status_label::LOADING_STRING,
 };
 use crate::backend::{rss::RssBackend, Backend, BackendError};
 use crate::config::ConfigHandler;
@@ -14,12 +15,12 @@ use tui::layout::Rect;
 
 #[derive(Clone)]
 pub struct ConfigProvider {
-    actions: StatusLabelActions,
+    actions: Actions,
     main_view: Arc<Mutex<Option<MainView>>>,
 }
 
 impl ConfigProvider {
-    pub fn new(actions: StatusLabelActions) -> Self {
+    pub fn new(actions: Actions) -> Self {
         let mut config_provider = Self {
             actions,
             main_view: Arc::new(Mutex::new(None)),
@@ -40,7 +41,7 @@ impl ConfigProvider {
     }
 
     async fn init_configs_impl(
-        actions: StatusLabelActions,
+        actions: Actions,
         main_view: Arc<Mutex<Option<MainView>>>,
     ) -> Result<(), BackendError> {
         let finished_loading = actions.show_label(LOADING_STRING);

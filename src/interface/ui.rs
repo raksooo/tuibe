@@ -12,72 +12,56 @@ use tui::Terminal;
 
 #[derive(Debug, Error)]
 pub enum UiError {
-    #[error(display = "Failed to perform initial draw of component tree")]
+    #[error(display = "Failed to draw of component tree")]
     Draw(#[error(from)] std::io::Error),
+
     #[error(display = "Failed to send redraw message")]
-    ReDraw(#[error(from)] flume::SendError<()>),
+    ReDraw(#[error(from)] flume::SendError<UiMessage>),
+
+    #[error(display = "Failed to receive UiMessage")]
+    MessageReceiver(#[error(from)] flume::RecvError),
 }
 
-#[derive(Clone)]
-pub struct ProgramActions {
-    quit_sender: flume::Sender<()>,
-    redraw_sender: flume::Sender<()>,
-}
-
-#[allow(dead_code)]
-impl ProgramActions {
-    pub fn quit(&self) -> Result<(), flume::SendError<()>> {
-        self.quit_sender.send(())
-    }
-
-    pub async fn quit_async(&self) -> Result<(), flume::SendError<()>> {
-        self.quit_sender.send_async(()).await
-    }
-
-    pub fn redraw(&self) -> Result<(), flume::SendError<()>> {
-        self.redraw_sender.send(())
-    }
-
-    pub async fn redraw_async(&self) -> Result<(), flume::SendError<()>> {
-        self.redraw_sender.send_async(()).await
-    }
+#[derive(Eq, PartialEq)]
+pub enum UiMessage {
+    Quit,
+    Redraw,
 }
 
 pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F) -> Result<(), UiError>
 where
     C: Component,
-    F: FnOnce(ProgramActions) -> C,
+    F: FnOnce(flume::Sender<UiMessage>) -> C,
 {
     let mut event_reader = EventStream::new();
-    let (quit_sender, quit_receiver) = flume::unbounded();
-    let (redraw_sender, redraw_receiver) = flume::unbounded();
+    let (ui_sender, ui_receiver) = flume::unbounded();
 
-    let program_actions = ProgramActions {
-        quit_sender,
-        redraw_sender,
-    };
-
-    let mut root = creator(program_actions.clone());
-    program_actions.redraw_async().await?;
+    let mut root = creator(ui_sender.clone());
+    ui_sender.send_async(UiMessage::Redraw).await?;
 
     info!("Starting event loop");
     loop {
         select! {
             event = event_reader.next() => {
                 if let Some(Ok(event)) = event {
+                    debug!("Received event: {:?}", event);
                     root.handle_event(event);
                 }
             },
 
-            _ = quit_receiver.recv_async() => break,
-
-            event = redraw_receiver.recv_async() => {
-                if event.is_ok() {
-                    let drained = redraw_receiver.drain();
+            event = ui_receiver.recv_async() => match event? {
+                UiMessage::Quit => break,
+                UiMessage::Redraw => {
+                    let drained = ui_receiver.drain();
                     if drained.len() > 0 {
                         debug!("Drained {} redraw messages", drained.len());
+
+                        if drained.into_iter().any(|message| message == UiMessage::Quit) {
+                            break;
+                        }
                     }
 
+                    debug!("Redrawing");
                     perform_draw(terminal, &mut root)?;
 
                     // Wait a few milliseconds to prevent to many consecutive redraws

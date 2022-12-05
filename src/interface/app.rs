@@ -1,8 +1,11 @@
 use super::{
+    actions::Actions,
     component::{Component, Frame},
+    config_provider::ConfigProvider,
     error_handler::ErrorHandler,
+    status_label::StatusLabel,
+    ui::UiMessage,
 };
-use crate::ui::ProgramActions;
 
 use crossterm::event::{Event, KeyCode};
 use tui::{
@@ -12,17 +15,26 @@ use tui::{
 };
 
 pub struct App {
-    actions: ProgramActions,
+    actions: Actions,
     error_handler: ErrorHandler,
+    status_label: StatusLabel,
 }
 
 impl App {
-    pub fn new(actions: ProgramActions) -> Self {
-        let error_handler = ErrorHandler::new(actions.clone());
+    pub fn new(ui_sender: flume::Sender<UiMessage>) -> Self {
+        let (error_sender, error_receiver) = flume::unbounded();
+        let (status_label_sender, status_label_receiver) = flume::unbounded();
+
+        let actions = Actions::new(ui_sender, error_sender, status_label_sender);
+        let config_provider = ConfigProvider::new(actions.clone());
+
+        let error_handler = ErrorHandler::new(actions.clone(), error_receiver, config_provider);
+        let status_label = StatusLabel::new(actions.clone(), status_label_receiver);
 
         Self {
             actions,
             error_handler,
+            status_label,
         }
     }
 
@@ -51,6 +63,7 @@ impl Component for App {
         // It would be unreasonable for the number of command lines to be greater than u16
         let events_height = (events.len() as u16) + 1;
 
+        let status_label_area = Rect::new(0, 0, area.width, 1);
         let content_area = Rect::new(area.x, area.y, area.width, area.height - events_height);
         let events_area = Rect::new(
             area.x + 1,
@@ -60,6 +73,7 @@ impl Component for App {
         );
 
         self.error_handler.draw(f, content_area);
+        self.status_label.draw(f, status_label_area);
 
         let events = Paragraph::new(events.join("\n"))
             .block(Block::default().borders(Borders::TOP))
@@ -71,12 +85,8 @@ impl Component for App {
 
     fn handle_event(&mut self, event: Event) {
         match event {
-            Event::Key(event) if event.code == KeyCode::Char('q') => {
-                self.actions.quit().expect("Failed to quit");
-            }
-            Event::Resize(_, _) => {
-                let _ = self.actions.redraw();
-            }
+            Event::Key(event) if event.code == KeyCode::Char('q') => self.actions.quit(),
+            Event::Resize(_, _) => self.actions.redraw(),
             _ => self.error_handler.handle_event(event),
         }
     }

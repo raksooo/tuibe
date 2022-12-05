@@ -1,7 +1,7 @@
 use super::{
+    actions::Actions,
     component::{Component, Frame},
     feed_view::FeedView,
-    status_label::StatusLabelActions,
 };
 use crate::backend::Backend;
 use crate::config::ConfigHandler;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub struct MainView {
-    actions: StatusLabelActions,
+    actions: Actions,
 
     show_backend_view: Arc<Mutex<bool>>,
 
@@ -22,14 +22,14 @@ pub struct MainView {
 
 impl MainView {
     pub fn new<C, CF>(
-        actions: StatusLabelActions,
+        actions: Actions,
         config: ConfigHandler,
         backend: Arc<impl Backend + Send + Sync + 'static>,
         backend_view_creator: CF,
     ) -> Self
     where
         C: Component + Send + 'static,
-        CF: FnOnce(StatusLabelActions) -> C,
+        CF: FnOnce(Actions) -> C,
     {
         Self {
             show_backend_view: Arc::new(Mutex::new(false)),

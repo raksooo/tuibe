@@ -2,7 +2,9 @@ pub mod ui;
 
 mod backend;
 
+mod actions;
 pub mod app;
+
 mod config_provider;
 mod dialog;
 mod error_handler;

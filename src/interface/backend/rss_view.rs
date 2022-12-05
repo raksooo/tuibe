@@ -4,9 +4,10 @@ use crate::{
         rss::{Feed, RssBackend},
     },
     interface::{
+        actions::Actions,
         component::{Component, Frame},
         list::{List, Same},
-        status_label::{StatusLabelActions, LOADING_STRING},
+        status_label::LOADING_STRING,
     },
 };
 
@@ -32,13 +33,13 @@ impl Same for Feed {
 }
 
 pub struct RssBackendView {
-    actions: StatusLabelActions,
+    actions: Actions,
     backend: Arc<RssBackend>,
     list: Arc<Mutex<List<Feed>>>,
 }
 
 impl RssBackendView {
-    pub fn new(actions: StatusLabelActions, backend: Arc<RssBackend>) -> Self {
+    pub fn new(actions: Actions, backend: Arc<RssBackend>) -> Self {
         let rss_backend_view = Self {
             actions,
             backend: backend.clone(),
@@ -62,7 +63,7 @@ impl RssBackendView {
 
     async fn handle_backend_message(
         message: BackendMessage<Feed>,
-        actions: StatusLabelActions,
+        actions: Actions,
         list: Arc<Mutex<List<Feed>>>,
     ) {
         match message {

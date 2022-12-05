@@ -1,7 +1,8 @@
 use super::{
+    actions::Actions,
     component::{Component, Frame},
     list::{List, Same},
-    status_label::{StatusLabelActions, LOADING_STRING},
+    status_label::LOADING_STRING,
 };
 use crate::backend::{channel::BackendMessage, Backend, Video};
 use crate::config::ConfigHandler;
@@ -167,7 +168,7 @@ impl VideoList {
 }
 
 pub struct FeedView {
-    actions: StatusLabelActions,
+    actions: Actions,
     config: Arc<ConfigHandler>,
     loading_id: Arc<Mutex<Option<usize>>>,
     video_list: Arc<Mutex<VideoList>>,
@@ -175,7 +176,7 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(
-        actions: StatusLabelActions,
+        actions: Actions,
         config: ConfigHandler,
         backend: Arc<impl Backend + Send + Sync + 'static>,
     ) -> Self {
@@ -218,7 +219,7 @@ impl FeedView {
     async fn handle_backend_message(
         message: BackendMessage<Video>,
         loading_id: Arc<Mutex<Option<usize>>>,
-        actions: StatusLabelActions,
+        actions: Actions,
         config: Arc<ConfigHandler>,
         video_list: Arc<Mutex<VideoList>>,
     ) {
