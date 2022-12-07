@@ -12,5 +12,6 @@ mod feed_view;
 mod list;
 mod main_view;
 mod status_label;
+mod video_list;
 
 mod component;
