@@ -129,7 +129,7 @@ impl FeedView {
             let player = self.get_player();
             let actions = self.actions.clone();
             tokio::spawn(async move {
-                let videos = selected_videos.iter().map(|video| video.url());
+                let videos = selected_videos.iter().map(|video| video.url()).rev();
                 let play_result = Command::new(player)
                     .args(videos)
                     .stdout(Stdio::null())
