@@ -48,7 +48,7 @@ impl VideoListItem {
     }
 
     pub fn deselect(&mut self) {
-        self.selected = !self.selected;
+        self.selected = false;
     }
 
     pub fn select_based_on_timestamp(&mut self, last_played_timestamp: i64) {
