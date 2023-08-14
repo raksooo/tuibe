@@ -124,7 +124,10 @@ impl FeedView {
 
         if let Some(newest_video) = selected_videos.first() {
             let finish_status = self.actions.show_label("Playing...");
-            self.update_last_played_timestamp(newest_video.date().timestamp());
+            let new_timetamp = newest_video.date().timestamp();
+            if new_timetamp > self.config.last_played_timestamp() {
+                self.update_last_played_timestamp(new_timetamp);
+            }
 
             let player = self.get_player();
             let actions = self.actions.clone();
@@ -132,6 +135,26 @@ impl FeedView {
                 let videos = selected_videos.iter().map(|video| video.url()).rev();
                 let play_result = Command::new(player)
                     .args(videos)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .await;
+
+                finish_status();
+                actions.redraw_or_error_async(play_result, true).await;
+            });
+        }
+    }
+
+    fn play_current(&mut self) {
+        if let Some(current_video) = self.video_list.lock().current_video() {
+            let finish_status = self.actions.show_label("Playing...");
+            let player = self.get_player();
+            let actions = self.actions.clone();
+            tokio::spawn(async move {
+                let video = current_video.url();
+                let play_result = Command::new(player)
+                    .arg(video)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .status()
@@ -201,7 +224,8 @@ impl Component for FeedView {
                 KeyCode::Char('G') => self.video_list.lock().move_bottom(),
                 KeyCode::Char('a') => self.video_list.lock().deselect_all(),
                 KeyCode::Char(' ') => self.video_list.lock().toggle_current(),
-                KeyCode::Char('p') => self.play(),
+                KeyCode::Enter => self.play(),
+                KeyCode::Char('p') => self.play_current(),
                 KeyCode::Char('n') => self.set_current_as_last_played(),
                 _ => return,
             }
@@ -217,7 +241,8 @@ impl Component for FeedView {
             (String::from("g"), String::from("Top")),
             (String::from("G"), String::from("Bottom")),
             (String::from("Space"), String::from("Select")),
-            (String::from("p"), String::from("Play")),
+            (String::from("Enter"), String::from("Play")),
+            (String::from("p"), String::from("Play current")),
             (String::from("n"), String::from("Update last played")),
             (String::from("a"), String::from("Deselect all")),
         ]

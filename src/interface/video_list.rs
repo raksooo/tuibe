@@ -144,6 +144,10 @@ impl VideoList {
             .collect()
     }
 
+    pub fn current_video(&self) -> Option<VideoListItem> {
+        self.0.get_current_item()
+    }
+
     pub fn current_description(&self) -> Paragraph<'_> {
         let description = self
             .0
