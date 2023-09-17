@@ -28,10 +28,12 @@ pub enum UiMessage {
     Redraw,
 }
 
-pub async fn create<C, F>(terminal: &mut Terminal<Backend>, creator: F) -> Result<(), UiError>
+pub async fn create<T: Component, F>(
+    terminal: &mut Terminal<Backend>,
+    creator: F,
+) -> Result<(), UiError>
 where
-    C: Component,
-    F: FnOnce(flume::Sender<UiMessage>) -> C,
+    F: FnOnce(flume::Sender<UiMessage>) -> T,
 {
     let mut event_reader = EventStream::new();
     let (ui_sender, ui_receiver) = flume::unbounded();
@@ -78,9 +80,9 @@ async fn delayed_recv<T>(receiver: &flume::Receiver<T>, delay: u64) -> Result<T,
     receiver.recv_async().await
 }
 
-fn perform_draw(
+fn perform_draw<T: Component>(
     terminal: &mut Terminal<Backend>,
-    root: &mut impl Component,
+    root: &mut T,
 ) -> Result<(), UiError> {
     terminal.draw(|f| root.draw(f, f.size()))?;
     Ok(())

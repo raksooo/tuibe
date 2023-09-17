@@ -16,7 +16,7 @@ use tui::{
 
 pub struct App {
     actions: Actions,
-    error_handler: ErrorHandler,
+    error_handler: ErrorHandler<ConfigProvider>,
     status_label: StatusLabel,
 }
 

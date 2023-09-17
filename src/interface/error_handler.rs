@@ -14,22 +14,18 @@ pub struct ErrorMessage {
     pub ignorable: bool,
 }
 
-pub struct ErrorHandler {
+pub struct ErrorHandler<T: Component> {
     actions: Actions,
     error: Arc<Mutex<Option<ErrorMessage>>>,
-    child: Box<dyn Component>,
+    child: T,
 }
 
-impl ErrorHandler {
-    pub fn new(
-        actions: Actions,
-        receiver: flume::Receiver<ErrorMessage>,
-        child: impl Component + 'static,
-    ) -> Self {
+impl<T: Component> ErrorHandler<T> {
+    pub fn new(actions: Actions, receiver: flume::Receiver<ErrorMessage>, child: T) -> Self {
         let new_error_handler = Self {
             actions,
             error: Arc::new(Mutex::new(None)),
-            child: Box::new(child),
+            child,
         };
 
         new_error_handler.listen_error_messages(receiver);
@@ -51,7 +47,7 @@ impl ErrorHandler {
     }
 }
 
-impl Component for ErrorHandler {
+impl<T: Component> Component for ErrorHandler<T> {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         self.child.draw(f, area);
 
