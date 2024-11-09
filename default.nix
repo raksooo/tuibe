@@ -16,13 +16,7 @@ in
     pname = "tuibe";
     version = "0.1.0";
 
-    src = pkgs.fetchFromGitHub {
-      owner = "raksooo";
-      repo = "tuibe";
-      rev = "afba981bbcdc16e0e518ab9c1110502b05953f10";
-      hash = "sha256-ldwRYnStSXu+Vfe0c19L0OFFr4DiS+p/rvhIWvszCzo=";
-    };
-
+    src = ./.;
     cargoHash = "sha256-w6xB4ulrionZvVoynLu+TK0otLPlF4dBeq9SCbJ5lDU=";
 
     inherit nativeBuildInputs buildInputs;
