@@ -17,7 +17,7 @@ in
     version = "0.1.0";
 
     src = ./.;
-    cargoHash = "sha256-w6xB4ulrionZvVoynLu+TK0otLPlF4dBeq9SCbJ5lDU=";
+    cargoLock.lockFile = ./Cargo.lock;
 
     inherit nativeBuildInputs buildInputs;
   };
@@ -27,5 +27,4 @@ in
     buildInputs = compilation ++ nativeBuildInputs ++ buildInputs;
     LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.openssl ];
   };
-
 }
