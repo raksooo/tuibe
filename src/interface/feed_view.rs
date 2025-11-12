@@ -16,6 +16,7 @@ use ratatui::{
 };
 use std::{env, process::Stdio, sync::Arc};
 use tokio::process::Command;
+use wl_clipboard_rs::copy::{MimeType, Options, Source};
 
 pub struct FeedView {
     actions: Actions,
@@ -168,6 +169,14 @@ impl FeedView {
         }
     }
 
+    fn copy_current(&mut self) {
+        if let Some(current_video) = self.video_list.lock().current_video() {
+            let url = current_video.url();
+            let opts = Options::new();
+            let _ = opts.copy(Source::Bytes(url.into_bytes().into()), MimeType::Autodetect);
+        }
+    }
+
     fn get_player(&self) -> String {
         env::args()
             .skip_while(|arg| arg != "--player")
@@ -228,6 +237,7 @@ impl Component for FeedView {
                 KeyCode::Char(' ') => self.video_list.lock().toggle_current(),
                 KeyCode::Enter => self.play(),
                 KeyCode::Char('p') => self.play_current(),
+                KeyCode::Char('y') => self.copy_current(),
                 KeyCode::Char('n') => self.set_current_as_last_played(),
                 _ => return,
             }
@@ -245,6 +255,7 @@ impl Component for FeedView {
             (String::from("Space"), String::from("Select")),
             (String::from("Enter"), String::from("Play")),
             (String::from("p"), String::from("Play current")),
+            (String::from("y"), String::from("Copy url")),
             (String::from("n"), String::from("Update last played")),
             (String::from("a"), String::from("Deselect all")),
         ]
