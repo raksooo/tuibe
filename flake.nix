@@ -53,6 +53,23 @@
             home.packages = [ self.packages.${pkgs.system}.default ];
           };
         };
+
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          default = pkgs.mkShellNoCC {
+            packages = with pkgs; [
+              gcc
+              cargo
+              rustc
+              pkg-config
+              openssl
+            ];
+          };
+        }
+      );
     };
 }
-
