@@ -6,9 +6,9 @@ use crossterm::event::EventStream;
 use err_derive::Error;
 use futures_timer::Delay;
 use log::{debug, info};
+use ratatui::Terminal;
 use tokio::select;
 use tokio_stream::StreamExt;
-use tui::Terminal;
 
 #[derive(Debug, Error)]
 pub enum UiError {

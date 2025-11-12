@@ -13,12 +13,12 @@ use crate::{
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
-use std::sync::Arc;
-use tui::{
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, ListItem},
 };
+use std::sync::Arc;
 
 impl From<Feed> for ListItem<'static> {
     fn from(value: Feed) -> Self {

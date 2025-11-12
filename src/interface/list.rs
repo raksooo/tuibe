@@ -1,9 +1,9 @@
-use sorted_vec::SortedSet;
-use std::ops::Range;
-use tui::{
+use ratatui::{
     style::{Color, Style},
     widgets::{List as ListWidget, ListItem},
 };
+use sorted_vec::SortedSet;
+use std::ops::Range;
 
 pub trait Same {
     fn same(&self, other: &Self) -> bool;
@@ -59,7 +59,9 @@ impl<T: Clone + Ord + Same + Into<ListItem<'static>>> List<T> {
     }
 
     pub fn get_current_item(&self) -> Option<T> {
-        let Some(current_index) = self.current_index else { return None };
+        let Some(current_index) = self.current_index else {
+            return None;
+        };
         self.items.get(current_index).cloned()
     }
 
@@ -68,7 +70,9 @@ impl<T: Clone + Ord + Same + Into<ListItem<'static>>> List<T> {
     }
 
     pub fn mutate_current_item(&mut self, f: impl FnOnce(&mut T)) {
-        let Some(current_index) = self.current_index else { return };
+        let Some(current_index) = self.current_index else {
+            return;
+        };
         self.items
             .mutate_vec(|items| items.get_mut(current_index).map(f));
     }
@@ -91,7 +95,9 @@ impl<T: Clone + Ord + Same + Into<ListItem<'static>>> List<T> {
         R: Into<ListItem<'static>>,
         F: Fn(T) -> R,
     {
-        let Some(current_index) = self.current_index else { return Default::default() };
+        let Some(current_index) = self.current_index else {
+            return Default::default();
+        };
         let range = Self::list_range(height, self.items.len(), current_index);
         self.items
             .iter()

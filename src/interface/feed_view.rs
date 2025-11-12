@@ -9,13 +9,13 @@ use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
-use std::{env, process::Stdio, sync::Arc};
-use tokio::process::Command;
-use tui::{
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
     widgets::Block,
 };
+use std::{env, process::Stdio, sync::Arc};
+use tokio::process::Command;
 
 pub struct FeedView {
     actions: Actions,
@@ -94,7 +94,9 @@ impl FeedView {
     }
 
     fn set_current_as_last_played(&mut self) {
-        let Some(last_played_timestamp) = self.video_list.lock().current_timestamp() else { return };
+        let Some(last_played_timestamp) = self.video_list.lock().current_timestamp() else {
+            return;
+        };
         self.update_last_played_timestamp(last_played_timestamp);
     }
 

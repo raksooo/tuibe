@@ -8,7 +8,7 @@ use super::{
 };
 
 use crossterm::event::{Event, KeyCode};
-use tui::{
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph, Wrap},

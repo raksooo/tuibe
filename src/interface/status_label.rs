@@ -4,12 +4,12 @@ use super::{
 };
 
 use parking_lot::Mutex;
-use std::{collections::HashMap, sync::Arc};
-use tui::{
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
     widgets::Paragraph,
 };
+use std::{collections::HashMap, sync::Arc};
 
 pub const LOADING_STRING: &str = "Loading...";
 

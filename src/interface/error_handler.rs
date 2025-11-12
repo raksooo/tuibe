@@ -6,8 +6,8 @@ use super::{
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
+use ratatui::layout::Rect;
 use std::sync::Arc;
-use tui::layout::Rect;
 
 pub struct ErrorMessage {
     pub message: String,

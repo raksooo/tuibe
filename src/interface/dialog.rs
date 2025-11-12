@@ -1,6 +1,6 @@
 use crate::interface::component::{Component, Frame};
 
-use tui::{
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},

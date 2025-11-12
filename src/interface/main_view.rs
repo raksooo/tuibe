@@ -8,8 +8,8 @@ use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use std::sync::Arc;
-use tui::layout::{Constraint, Direction, Layout, Rect};
 
 pub struct MainView {
     actions: Actions,

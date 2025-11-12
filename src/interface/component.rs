@@ -1,8 +1,8 @@
 use crossterm::event::Event;
-use tui::{backend::CrosstermBackend, layout::Rect, Frame as TuiFrame};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Frame as TuiFrame};
 
 pub type Backend = CrosstermBackend<std::io::Stdout>;
-pub type Frame<'a> = TuiFrame<'a, Backend>;
+pub type Frame<'a> = TuiFrame<'a>;
 
 pub trait Component {
     fn draw(&mut self, f: &mut Frame, area: Rect);

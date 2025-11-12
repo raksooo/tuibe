@@ -10,8 +10,8 @@ use crate::config::ConfigHandler;
 
 use crossterm::event::Event;
 use parking_lot::Mutex;
+use ratatui::layout::Rect;
 use std::sync::Arc;
-use tui::layout::Rect;
 
 #[derive(Clone)]
 pub struct ConfigProvider {

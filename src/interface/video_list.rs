@@ -3,11 +3,11 @@ use crate::backend::{channel::BackendMessage, Video};
 
 use chrono::{DateTime, FixedOffset};
 use delegate::delegate;
-use std::cmp::Reverse;
-use tui::{
+use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders, List as ListWidget, ListItem, Paragraph, Wrap},
 };
+use std::cmp::Reverse;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VideoListItem {
