@@ -84,6 +84,6 @@ fn perform_draw<T: Component>(
     terminal: &mut Terminal<Backend>,
     root: &mut T,
 ) -> Result<(), UiError> {
-    terminal.draw(|f| root.draw(f, f.size()))?;
+    terminal.draw(|f| root.draw(f, f.area()))?;
     Ok(())
 }

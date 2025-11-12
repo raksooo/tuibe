@@ -4,7 +4,11 @@ mod config_error;
 mod file_handler;
 mod interface;
 
-use std::{fs::File, str::FromStr};
+use std::{
+    fs::{self, File},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use backend::{rss::RssBackend, Backend};
 use interface::{app::App, ui};
@@ -36,19 +40,6 @@ async fn main() {
     } else {
         run().await;
     }
-}
-
-fn setup_logging() {
-    let log_level = std::env::var("LOG_LEVEL")
-        .ok()
-        .unwrap_or_else(|| String::from("Off"));
-
-    CombinedLogger::init(vec![WriteLogger::new(
-        LevelFilter::from_str(&log_level).expect("Failed to parse log level"),
-        simplelog::Config::default(),
-        File::create("tuibe.log").expect("Failed to create log file"),
-    )])
-    .expect("Failed to set up logger");
 }
 
 fn print_help() {
@@ -90,4 +81,36 @@ async fn run() {
     )
     .expect("Failed to clean up");
     terminal.show_cursor().expect("Failed to clean up");
+}
+
+fn setup_logging() {
+    let log_level = std::env::var("LOG_LEVEL")
+        .ok()
+        .unwrap_or_else(|| String::from("Off"));
+
+    let config_path = get_config_file_path();
+    fs::create_dir_all(config_path.parent().expect("Invalid path"))
+        .expect("Failed to create log dir");
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::from_str(&log_level).expect("Failed to parse log level"),
+        simplelog::Config::default(),
+        File::create(config_path).expect("Failed to create log file"),
+    )])
+    .expect("Failed to set up logger");
+}
+
+pub fn get_config_file_path() -> PathBuf {
+    let mut path = PathBuf::new();
+
+    match std::env::var("XDG_STATE_HOME") {
+        Ok(config_dir) => path.push(config_dir),
+        _ => {
+            let home = std::env::var("HOME").unwrap_or(String::from("."));
+            path.push(home);
+            path.push(".local/state");
+        }
+    }
+
+    path.push("tuibe/tuibe.log");
+    path
 }
