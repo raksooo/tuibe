@@ -117,10 +117,10 @@ impl Component for RssBackendView {
         match event {
             Event::Key(event) => match event.code {
                 KeyCode::Char('d') => self.remove_selected(),
-                KeyCode::Up => self.list.lock().move_up(),
-                KeyCode::Down => self.list.lock().move_down(),
-                KeyCode::Char('j') => self.list.lock().move_down(),
-                KeyCode::Char('k') => self.list.lock().move_up(),
+                KeyCode::Up => self.list.lock().move_up(1),
+                KeyCode::Down => self.list.lock().move_down(1),
+                KeyCode::Char('j') => self.list.lock().move_down(1),
+                KeyCode::Char('k') => self.list.lock().move_up(1),
                 _ => return,
             },
             Event::Paste(url) => self.add_url(&url),

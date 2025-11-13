@@ -227,10 +227,12 @@ impl Component for FeedView {
     fn handle_event(&mut self, event: Event) {
         if let Event::Key(event) = event {
             match event.code {
-                KeyCode::Up => self.video_list.lock().move_up(),
-                KeyCode::Down => self.video_list.lock().move_down(),
-                KeyCode::Char('j') => self.video_list.lock().move_down(),
-                KeyCode::Char('k') => self.video_list.lock().move_up(),
+                KeyCode::Up => self.video_list.lock().move_up(1),
+                KeyCode::Down => self.video_list.lock().move_down(1),
+                KeyCode::Char('j') => self.video_list.lock().move_down(1),
+                KeyCode::Char('k') => self.video_list.lock().move_up(1),
+                KeyCode::Char('d') => self.video_list.lock().move_down(15),
+                KeyCode::Char('u') => self.video_list.lock().move_up(15),
                 KeyCode::Char('g') => self.video_list.lock().move_top(),
                 KeyCode::Char('G') => self.video_list.lock().move_bottom(),
                 KeyCode::Char('a') => self.video_list.lock().deselect_all(),
@@ -250,6 +252,8 @@ impl Component for FeedView {
         vec![
             (String::from("j"), String::from("Down")),
             (String::from("k"), String::from("Up")),
+            (String::from("d"), String::from("Page down")),
+            (String::from("u"), String::from("Page up")),
             (String::from("g"), String::from("Top")),
             (String::from("G"), String::from("Bottom")),
             (String::from("Space"), String::from("Select")),

@@ -38,12 +38,12 @@ impl<T: Clone + Ord + Same + Into<ListItem<'static>>> List<T> {
         self.items.clear();
     }
 
-    pub fn move_up(&mut self) {
-        self.mutate_current_index(|current_index| current_index.saturating_sub(1));
+    pub fn move_up(&mut self, steps: usize) {
+        self.mutate_current_index(|current_index| current_index.saturating_sub(steps));
     }
 
-    pub fn move_down(&mut self) {
-        self.mutate_current_index(|current_index| current_index.saturating_add(1));
+    pub fn move_down(&mut self, steps: usize) {
+        self.mutate_current_index(|current_index| current_index.saturating_add(steps));
     }
 
     pub fn move_top(&mut self) {

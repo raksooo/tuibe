@@ -98,8 +98,8 @@ impl VideoList {
 
     delegate! {
         to self.0 {
-            pub fn move_up(&mut self);
-            pub fn move_down(&mut self);
+            pub fn move_up(&mut self, steps: usize);
+            pub fn move_down(&mut self, steps: usize);
             pub fn move_top(&mut self);
             pub fn move_bottom(&mut self);
             pub fn list(&self, height: usize) -> ListWidget<'_>;
