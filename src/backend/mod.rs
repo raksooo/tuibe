@@ -7,15 +7,15 @@ use rss::RssBackendError;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
-use err_derive::Error;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BackendError {
-    #[error(display = "Config error: {}", _0)]
-    ConfigError(#[error(source)] ConfigError),
+    #[error("Config error: {}", _0)]
+    ConfigError(#[from] ConfigError),
 
-    #[error(display = "RSS backend error: {}", _0)]
-    RssBackendError(#[error(from)] RssBackendError),
+    #[error("RSS backend error: {}", _0)]
+    RssBackendError(#[from] RssBackendError),
 }
 
 #[async_trait]

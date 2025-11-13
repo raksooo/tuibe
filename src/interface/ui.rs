@@ -3,23 +3,23 @@ use std::time::Duration;
 use super::component::{Backend, Component};
 
 use crossterm::event::EventStream;
-use err_derive::Error;
 use futures_timer::Delay;
 use log::{debug, info};
 use ratatui::Terminal;
+use thiserror::Error;
 use tokio::select;
 use tokio_stream::StreamExt;
 
 #[derive(Debug, Error)]
 pub enum UiError {
-    #[error(display = "Failed to draw of component tree")]
-    Draw(#[error(from)] std::io::Error),
+    #[error("Failed to draw of component tree")]
+    Draw(#[from] std::io::Error),
 
-    #[error(display = "Failed to send redraw message")]
-    ReDraw(#[error(from)] flume::SendError<UiMessage>),
+    #[error("Failed to send redraw message")]
+    ReDraw(#[from] flume::SendError<UiMessage>),
 
-    #[error(display = "Failed to receive UiMessage")]
-    MessageReceiver(#[error(from)] flume::RecvError),
+    #[error("Failed to receive UiMessage")]
+    MessageReceiver(#[from] flume::RecvError),
 }
 
 #[derive(Eq, PartialEq)]

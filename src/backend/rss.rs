@@ -6,32 +6,32 @@ use crate::{config_error::ConfigError, file_handler::ConfigFileHandler};
 
 use async_trait::async_trait;
 use atom_syndication::Entry;
-use err_derive::Error;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::fs;
 
 const CONFIG_NAME: &str = "rss";
 
 #[derive(Debug, Error)]
 pub enum RssBackendError {
-    #[error(display = "Failed to fetch RSS feed")]
-    FetchFeed(#[error(from)] reqwest::Error),
+    #[error("Failed to fetch RSS feed")]
+    FetchFeed(#[from] reqwest::Error),
 
-    #[error(display = "Failed to join fetch handles")]
-    JoinFetchTasks(#[error(from)] tokio::task::JoinError),
+    #[error("Failed to join fetch handles")]
+    JoinFetchTasks(#[from] tokio::task::JoinError),
 
-    #[error(display = "Failed to read RSS feed: {}", _0)]
-    ReadFeed(#[error(from)] atom_syndication::Error),
+    #[error("Failed to read RSS feed: {}", _0)]
+    ReadFeed(#[from] atom_syndication::Error),
 
-    #[error(display = "Failed to parse video")]
+    #[error("Failed to parse video")]
     ParseVideo,
 
-    #[error(display = "Failed to read subscriptions file: {}", _0)]
-    ReadYoutubeTakeout(#[error(source, no_from)] std::io::Error),
+    #[error("Failed to read subscriptions file: {}", _0)]
+    ReadYoutubeTakeout(#[source] std::io::Error),
 
-    #[error(display = "Failed to parse YouTube takeout")]
+    #[error("Failed to parse YouTube takeout")]
     ParseYoutubeTakeout,
 }
 

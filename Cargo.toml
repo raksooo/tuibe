@@ -12,7 +12,6 @@ atom_syndication = "0.12.7"
 chrono = "0.4.22"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 delegate = "0.13.4"
-err-derive = "0.3.1"
 flume = "0.11.1"
 futures = "0.3.25"
 futures-timer = "3.0.2"
@@ -23,6 +22,7 @@ reqwest = { version = "0.12.24", features = ["json"] }
 serde = { version = "1.0.147", features = ["derive"] }
 simplelog = "0.12.0"
 sorted-vec = "0.8.1"
+thiserror = "2.0.17"
 tokio = { version = "1.21.2", features = ["full"] }
 tokio-stream = "0.1.11"
 toml = "0.9.8"
