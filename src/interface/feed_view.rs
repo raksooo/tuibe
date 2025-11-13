@@ -4,7 +4,7 @@ use super::{
     status_label::LOADING_STRING,
     video_list::VideoList,
 };
-use crate::backend::{channel::BackendMessage, Backend, Video};
+use crate::backend::{channel::BackendMessage, rss::RssBackend, Backend, Video};
 use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
@@ -21,19 +21,17 @@ use wl_clipboard_rs::copy::{MimeType, Options, Source};
 pub struct FeedView {
     actions: Actions,
     config: Arc<ConfigHandler>,
+    backend: Arc<RssBackend>,
     loading_id: Arc<Mutex<Option<usize>>>,
     video_list: Arc<Mutex<VideoList>>,
 }
 
 impl FeedView {
-    pub fn new(
-        actions: Actions,
-        config: ConfigHandler,
-        backend: Arc<impl Backend + Send + Sync + 'static>,
-    ) -> Self {
+    pub fn new(actions: Actions, config: ConfigHandler, backend: Arc<RssBackend>) -> Self {
         let feed_view = Self {
             actions,
             config: Arc::new(config),
+            backend: backend.clone(),
             loading_id: Default::default(),
             video_list: Arc::new(Mutex::new(VideoList::new())),
         };
@@ -241,6 +239,7 @@ impl Component for FeedView {
                 KeyCode::Char('p') => self.play_current(),
                 KeyCode::Char('y') => self.copy_current(),
                 KeyCode::Char('n') => self.set_current_as_last_played(),
+                KeyCode::Char('r') => self.backend.refetch(),
                 _ => return,
             }
         }
@@ -262,6 +261,7 @@ impl Component for FeedView {
             (String::from("y"), String::from("Copy url")),
             (String::from("n"), String::from("Update last played")),
             (String::from("a"), String::from("Deselect all")),
+            (String::from("r"), String::from("Reload")),
         ]
     }
 }
