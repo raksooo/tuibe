@@ -150,7 +150,7 @@ impl Actions {
         );
     }
 
-    pub fn show_label(&self, label: &str) -> impl FnOnce() {
+    pub fn show_label(&self, label: &str) -> impl FnOnce() + use<> {
         let id = self.start_status(label);
         let self_clone = self.clone();
         move || self_clone.finish_status(id)

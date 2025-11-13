@@ -89,7 +89,7 @@ impl RssBackendView {
     }
 
     fn add_url(&self, url: &str) {
-        let finish_loading = self.actions.show_label(LOADING_STRING);
+        let finish_loading = self.actions.clone().show_label(LOADING_STRING);
 
         let url = url.to_owned();
         let backend = self.backend.clone();

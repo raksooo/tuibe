@@ -4,7 +4,7 @@ use super::{
     main_view::MainView,
     status_label::LOADING_STRING,
 };
-use crate::backend::{rss::RssBackend, Backend, BackendError};
+use crate::backend::{Backend, BackendError, rss::RssBackend};
 use crate::config::ConfigHandler;
 
 use crossterm::event::Event;

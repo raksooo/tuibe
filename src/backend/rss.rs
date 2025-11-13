@@ -1,6 +1,6 @@
 use super::{
-    channel::{BackendMessage, BackendReceiver, BackendSender},
     Backend, BackendError, Video,
+    channel::{BackendMessage, BackendReceiver, BackendSender},
 };
 use crate::{config_error::ConfigError, file_handler::ConfigFileHandler};
 
