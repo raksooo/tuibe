@@ -1,9 +1,10 @@
 use super::{
     actions::Actions,
+    backend::rss_view::RssBackendView,
     component::{Component, Frame},
     feed_view::FeedView,
 };
-use crate::backend::Backend;
+use crate::backend::rss::RssBackend;
 use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
@@ -17,24 +18,15 @@ pub struct MainView {
     show_backend_view: Arc<Mutex<bool>>,
 
     feed: FeedView,
-    backend_view: Box<dyn Component + Send>,
+    backend_view: RssBackendView,
 }
 
 impl MainView {
-    pub fn new<C, CF>(
-        actions: Actions,
-        config: ConfigHandler,
-        backend: Arc<impl Backend + Send + Sync + 'static>,
-        backend_view_creator: CF,
-    ) -> Self
-    where
-        C: Component + Send + 'static,
-        CF: FnOnce(Actions) -> C,
-    {
+    pub fn new(actions: Actions, config: ConfigHandler, backend: Arc<RssBackend>) -> Self {
         Self {
             show_backend_view: Arc::new(Mutex::new(false)),
-            feed: FeedView::new(actions.clone(), config, backend),
-            backend_view: Box::new(backend_view_creator(actions.clone())),
+            feed: FeedView::new(actions.clone(), config, backend.clone()),
+            backend_view: RssBackendView::new(actions.clone(), backend),
             actions,
         }
     }

@@ -1,7 +1,7 @@
 use super::{
     actions::Actions,
+    backend_provider::BackendProvider,
     component::{Component, Frame},
-    config_provider::ConfigProvider,
     error_handler::ErrorHandler,
     status_label::StatusLabel,
     ui::UiMessage,
@@ -16,7 +16,7 @@ use ratatui::{
 
 pub struct App {
     actions: Actions,
-    error_handler: ErrorHandler<ConfigProvider>,
+    error_handler: ErrorHandler<BackendProvider>,
     status_label: StatusLabel,
 }
 
@@ -26,7 +26,7 @@ impl App {
         let (status_label_sender, status_label_receiver) = flume::unbounded();
 
         let actions = Actions::new(ui_sender, error_sender, status_label_sender);
-        let config_provider = ConfigProvider::new(actions.clone());
+        let config_provider = BackendProvider::new(actions.clone());
 
         let error_handler = ErrorHandler::new(actions.clone(), error_receiver, config_provider);
         let status_label = StatusLabel::new(actions.clone(), status_label_receiver);

@@ -1,6 +1,5 @@
 use super::{
     actions::Actions,
-    backend::rss_view::RssBackendView,
     component::{Component, Frame},
     main_view::MainView,
     status_label::LOADING_STRING,
@@ -14,12 +13,12 @@ use ratatui::layout::Rect;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct ConfigProvider {
+pub struct BackendProvider {
     actions: Actions,
     main_view: Arc<Mutex<Option<MainView>>>,
 }
 
-impl ConfigProvider {
+impl BackendProvider {
     pub fn new(actions: Actions) -> Self {
         let mut config_provider = Self {
             actions,
@@ -46,26 +45,17 @@ impl ConfigProvider {
     ) -> Result<(), BackendError> {
         let finished_loading = actions.show_label(LOADING_STRING);
         let config = ConfigHandler::load().await?;
-        let backend = Self::load_backend().await?;
-        let backend = Arc::new(backend);
+        let backend = Arc::new(RssBackend::load().await?);
 
         let mut main_view = main_view.lock();
-        *main_view = Some(MainView::new(actions, config, backend.clone(), |actions| {
-            // TODO: Initialize the correct backend view
-            RssBackendView::new(actions, backend)
-        }));
+        *main_view = Some(MainView::new(actions, config, backend.clone()));
 
         finished_loading();
         Ok(())
     }
-
-    async fn load_backend() -> Result<RssBackend, BackendError> {
-        // TODO: Load the correct backend
-        RssBackend::load().await
-    }
 }
 
-impl Component for ConfigProvider {
+impl Component for BackendProvider {
     fn draw(&mut self, f: &mut Frame, area: Rect) {
         if let Some(ref mut main_view) = *self.main_view.lock() {
             main_view.draw(f, area);

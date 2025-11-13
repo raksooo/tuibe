@@ -5,7 +5,7 @@ mod backend;
 mod actions;
 pub mod app;
 
-mod config_provider;
+mod backend_provider;
 mod dialog;
 mod error_handler;
 mod feed_view;
