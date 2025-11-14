@@ -6,7 +6,7 @@ use super::{
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use parking_lot::Mutex;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use std::sync::Arc;
 
 pub struct ErrorMessage {
@@ -56,7 +56,7 @@ impl<T: Component> Component for ErrorHandler<T> {
         }
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
         let mut error = self.error.lock();
         if let Some(ErrorMessage { ignorable, .. }) = *error {
             if ignorable && event == Event::Key(KeyEvent::from(KeyCode::Esc)) {
@@ -64,7 +64,7 @@ impl<T: Component> Component for ErrorHandler<T> {
                 self.actions.redraw();
             }
         } else {
-            self.child.handle_event(event);
+            self.child.handle_event(event, size);
         }
     }
 

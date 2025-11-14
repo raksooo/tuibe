@@ -47,7 +47,7 @@ where
             event = event_reader.next() => {
                 if let Some(Ok(event)) = event {
                     debug!("Received event: {:?}", event);
-                    root.handle_event(event);
+                    root.handle_event(event, terminal.size().ok());
                 }
             },
 

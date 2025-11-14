@@ -14,7 +14,7 @@ use crate::{
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use ratatui::{
-    layout::Rect,
+    layout::{Rect, Size},
     style::{Color, Style},
     widgets::{Block, Borders, ListItem},
 };
@@ -113,14 +113,18 @@ impl Component for RssBackendView {
         f.render_widget(styled_list, area);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
+        let height = size.map_or(30, |size| size.height.into());
+
         match event {
             Event::Key(event) => match event.code {
-                KeyCode::Char('d') => self.remove_selected(),
+                KeyCode::Char('x') => self.remove_selected(),
                 KeyCode::Up => self.list.lock().move_up(1),
                 KeyCode::Down => self.list.lock().move_down(1),
                 KeyCode::Char('j') => self.list.lock().move_down(1),
                 KeyCode::Char('k') => self.list.lock().move_up(1),
+                KeyCode::Char('d') => self.list.lock().move_down(height / 2),
+                KeyCode::Char('u') => self.list.lock().move_up(height / 2),
                 _ => return,
             },
             Event::Paste(url) => self.add_url(&url),
@@ -134,6 +138,8 @@ impl Component for RssBackendView {
         vec![
             (String::from("j"), String::from("Down")),
             (String::from("k"), String::from("Up")),
+            (String::from("d"), String::from("Page down")),
+            (String::from("u"), String::from("Page up")),
             (String::from("Paste"), String::from("Add feed")),
         ]
     }

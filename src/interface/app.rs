@@ -9,7 +9,7 @@ use super::{
 
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
-    layout::Rect,
+    layout::{Rect, Size},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
@@ -83,11 +83,11 @@ impl Component for App {
         f.render_widget(events, events_area);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
         match event {
             Event::Key(event) if event.code == KeyCode::Char('q') => self.actions.quit(),
             Event::Resize(_, _) => self.actions.redraw(),
-            _ => self.error_handler.handle_event(event),
+            _ => self.error_handler.handle_event(event, size),
         }
     }
 

@@ -9,7 +9,7 @@ use crate::config::ConfigHandler;
 
 use crossterm::event::Event;
 use parking_lot::Mutex;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -62,9 +62,9 @@ impl Component for BackendProvider {
         }
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
         if let Some(ref mut main_view) = *self.main_view.lock() {
-            main_view.handle_event(event);
+            main_view.handle_event(event, size);
         }
     }
 

@@ -9,7 +9,7 @@ use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Rect, Size};
 use std::sync::Arc;
 
 pub struct MainView {
@@ -55,14 +55,14 @@ impl Component for MainView {
         self.feed.draw(f, chunks[1]);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
         if *self.show_backend_view.lock() {
             if matches!(event, Event::Key(event) if event.code == KeyCode::Esc) {
                 let mut show_backend_view = self.show_backend_view.lock();
                 *show_backend_view = false;
                 self.actions.redraw();
             } else {
-                self.backend_view.handle_event(event);
+                self.backend_view.handle_event(event, size);
             }
         } else if matches!(event, Event::Key(event) if event.code == KeyCode::Char('c')) {
             {
@@ -71,7 +71,7 @@ impl Component for MainView {
             }
             self.actions.redraw();
         } else {
-            self.feed.handle_event(event);
+            self.feed.handle_event(event, size);
         }
     }
 

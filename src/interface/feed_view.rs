@@ -4,13 +4,13 @@ use super::{
     status_label::LOADING_STRING,
     video_list::VideoList,
 };
-use crate::backend::{channel::BackendMessage, rss::RssBackend, Backend, Video};
+use crate::backend::{Backend, Video, channel::BackendMessage, rss::RssBackend};
 use crate::config::ConfigHandler;
 
 use crossterm::event::{Event, KeyCode};
 use parking_lot::Mutex;
 use ratatui::{
-    layout::Rect,
+    layout::{Rect, Size},
     style::{Color, Style},
     widgets::Block,
 };
@@ -222,15 +222,17 @@ impl Component for FeedView {
         f.render_widget(description, description_area);
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: Event, size: Option<Size>) {
+        let height = size.map_or(30, |size| size.height.into());
+
         if let Event::Key(event) = event {
             match event.code {
                 KeyCode::Up => self.video_list.lock().move_up(1),
                 KeyCode::Down => self.video_list.lock().move_down(1),
                 KeyCode::Char('j') => self.video_list.lock().move_down(1),
                 KeyCode::Char('k') => self.video_list.lock().move_up(1),
-                KeyCode::Char('d') => self.video_list.lock().move_down(15),
-                KeyCode::Char('u') => self.video_list.lock().move_up(15),
+                KeyCode::Char('d') => self.video_list.lock().move_down(height / 2),
+                KeyCode::Char('u') => self.video_list.lock().move_up(height / 2),
                 KeyCode::Char('g') => self.video_list.lock().move_top(),
                 KeyCode::Char('G') => self.video_list.lock().move_bottom(),
                 KeyCode::Char('a') => self.video_list.lock().deselect_all(),
