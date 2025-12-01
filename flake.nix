@@ -33,7 +33,7 @@
           };
 
           config = lib.mkIf config.programs.${name}.enable {
-            environment.systemPackages = [ self.packages.${pkgs.system}.default ];
+            environment.systemPackages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
           };
         };
 
@@ -50,7 +50,7 @@
           };
 
           config = lib.mkIf config.programs.${name}.enable {
-            home.packages = [ self.packages.${pkgs.system}.default ];
+            home.packages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
           };
         };
 
